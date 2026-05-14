@@ -1,1 +1,1 @@
-MESAJ=Hello modified file
+MESAJ=Hello from file
