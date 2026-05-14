@@ -1,1 +1,1 @@
-MESAJ=Hello from file
+MESAJ=Salut modificat din Docker
