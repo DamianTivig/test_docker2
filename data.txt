@@ -1,1 +1,1 @@
-Salut venit din SMB
+Hello from file
