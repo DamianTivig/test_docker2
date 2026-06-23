@@ -28,5 +28,5 @@ mkdir -p Tests/UT && \
 mkdir -p Tests/load && \
 mkdir -p patches && \
 
-echo '✅ Directory structure created successfully'
+echo 'Directory structure created successfully'
 "
