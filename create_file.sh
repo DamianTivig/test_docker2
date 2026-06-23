@@ -4,7 +4,7 @@ set -e
 
 echo "Connecting to server..."
 
-ssh -tt -o StrictHostKeyChecking=no uie74356@10.226.131.21 "\
+ssh -tt -o StrictHostKeyChecking=no uie74356@10.198.127.171 "\
 export TERM=xterm && \
 BASE='/db4/db/RDF/NA/2025Q1' && \
 DELIVERY='2024R4_RDF_North_America_241H0' && \
