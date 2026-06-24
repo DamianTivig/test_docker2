@@ -9,6 +9,7 @@ read -p "Enter VERSION: " VERSION
 REMOTE_USER="uie74356"
 REMOTE_HOST="10.198.127.171"
 REMOTE_BASE="${BASE}/${DELIVERY}/${VERSION}"
+REMOTE_BASE2="${BASE}/${DELIVERY}"
 
 echo "Connecting to server..."
 
@@ -20,8 +21,8 @@ mkdir -p ${REMOTE_BASE}/Tests/RDF
 mkdir -p ${REMOTE_BASE}/Tests/SIZE
 mkdir -p ${REMOTE_BASE}/Tests/SVF
 mkdir -p ${REMOTE_BASE}/Tests/UT
-mkdir -p ${REMOTE_BASE}/Tests/load/allfiles
-mkdir -p ${REMOTE_BASE}/Tests/load/rdfdeploy
+mkdir -p ${REMOTE_BASE2}/load/allfiles
+mkdir -p ${REMOTE_BASE2}/load/rdfdeploy
 mkdir -p ${REMOTE_BASE}/patches
 echo 'Directory structure created.'
 "
