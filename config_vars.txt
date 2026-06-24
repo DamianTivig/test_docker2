@@ -1,6 +1,6 @@
 # ---- CORE ----
 R2S_VER=addr_na_510
-MY_EMAIL=asergiu-razvan.spatar@aumovio.com
+MY_EMAIL=sergiu-razvan.spatar@aumovio.com
 DSUFFIX=510
 OSUFFIX=420
 
