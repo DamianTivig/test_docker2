@@ -28,5 +28,15 @@ mkdir -p Tests/UT && \
 mkdir -p Tests/load && \
 mkdir -p patches && \
 
+
+touch Tests/RDF/AbakusRDF.csh && \
+touch Tests/SIZE/drop_users.sql && \
+touch Tests/SIZE/space_calculate.sql && \
+touch Tests/SVF/AbakusSVF.csh && \
+touch Tests/UT/runUT && \
+touch Tests/load/allfiles && \
+touch Tests/load/rdfdeploy && \
+
+
 echo 'Directory structure created successfully'
 "
