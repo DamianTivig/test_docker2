@@ -1,23 +1,11 @@
 #!/usr/bin/env python3
-"""
-Script to generate all configuration/script files for RDF/SVF pipeline.
-"""
-
 import os
 import stat
 
-def write_file(filename, content, executable=False):FFF
-    """Write content to a file and optionally make it executable."""
-    with open(filename, 'w', newline='\n') as f:
-        f.write(content)
-    if executable:
-        st = os.stat(filename)
-        os.chmod(filename, st.st_mode | stat.S_IEXEC | stat.S_IXGRP | stat.S_IXOTH)
-    print(f"  Created: {filename}")
-
-
-def generate_svf_patch_csh():
-    content = r"""#!/bin/csh
+files = {
+"SVF_PATCH.csh": {
+"executable": True,
+"content": r"""#!/bin/csh
  
 echo Pause for 60 seconds; 
 sleep 60
@@ -55,11 +43,10 @@ echo "SVF PATCHES DONE - check the logs for all the patches ${TIMESTAMP} " | mai
 echo Pause for 60 seconds; 
 sleep 60
 """
-    write_file("SVF_PATCH.csh", content, executable=True)
-
-
-def generate_rdf_na_611_xml():
-    content = r"""<?xml version="1.0" encoding="UTF-8"?>
+},
+"RDF_NA_611.XML": {
+"executable": False,
+"content": r"""<?xml version="1.0" encoding="UTF-8"?>
 <Workflow xmlns="http://navtech.com" 
     xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" 
     xmlns:log4j="http://jakarta.apache.org/log4j/" 
@@ -93,7 +80,6 @@ rdf_installer.bat etc/xml/userconfig.xml loadrdfCore loadAdmin loadSDO
  
 Example to create rdf Schema Only
 rdf_installer.bat etc/xml/userconfig.xml createrdfSchemaOnly
-
  
 -->
  
@@ -197,11 +183,10 @@ rdf_installer.bat etc/xml/userconfig.xml createrdfSchemaOnly
 </log4j:configuration>
 </Workflow>
 """
-    write_file("RDF_NA_611.XML", content)
-
-
-def generate_r2s_na_611_cfg():
-    content = r""";#################################################################################
+},
+"R2S_NA_611.CFG": {
+"executable": False,
+"content": r""";#################################################################################
 ;R2S generic 
 ;#################################################################################
  
@@ -431,11 +416,10 @@ R2S_META_RELEASE_DATE=100226
 R2S_META_COMPATIBILITY=2025R4
 ;-------------------------------------------------------------------------------
 """
-    write_file("R2S_NA_611.CFG", content)
-
-
-def generate_log_checker_pl():
-    content = r"""#!/usr/bin/perl -w
+},
+"log_checker.pl": {
+"executable": True,
+"content": r"""#!/usr/bin/perl -w
  
 =comment
 06.05.2013 Andrei Carp
@@ -560,11 +544,10 @@ sub porcess_file {
  
 __END__
 """
-    write_file("log_checker.pl", content, executable=True)
-
-
-def generate_load_na_611_csh():
-    content = r"""#!/bin/csh
+},
+"LOAD_NA_611.CSH": {
+"executable": True,
+"content": r"""#!/bin/csh
  
 echo $0 \[$$\]
  
@@ -1070,11 +1053,10 @@ endif
 ####  CALCULATE_SPACE	END SECTION ######
 echo "Subject: $RDF_AREA $DSUFIX Tests on R2S & Load finished..." | sendmail $MY_EMAIL
 """
-    write_file("LOAD_NA_611.CSH", content, executable=True)
-
-
-def generate_load_cfg_na_cfg():
-    content = r"""#!/bin/csh
+},
+"LOAD_CFG_NA.cfg": {
+"executable": True,
+"content": r"""#!/bin/csh
 echo Loading configuration file
 ##########################################################################
 set R2S_VIEW=sesp_na_611
@@ -1135,11 +1117,10 @@ set ABAKUS_PROD=na2026q1
 #################### PATCH --> SVF USER LIST - PATCH
 ###########################
 """
-    write_file("LOAD_CFG_NA.cfg", content)
-
-
-def generate_extract_2_load_pl():
-    content = r"""#!/usr/bin/perl -w
+},
+"extract_2_load.pl": {
+"executable": True,
+"content": r"""#!/usr/bin/perl -w
  
 ####################################################################################################
 #  Script     : extract_2_load.pl
@@ -1340,11 +1321,10 @@ sub secondsToReadableTime () {
  
 exit 0;
 """
-    write_file("extract_2_load.pl", content, executable=True)
-
-
-def generate_errorcheck_csh():
-    content = r"""#!/bin/csh -f
+},
+"errorCheck.csh": {
+"executable": True,
+"content": r"""#!/bin/csh -f
  
 # v1.01     20.02.2013
  
@@ -1394,11 +1374,10 @@ end
  
 exit 0
 """
-    write_file("errorCheck.csh", content, executable=True)
-
-
-def generate_drop_na_users_sql():
-    content = r"""set echo on;
+},
+"drop_na_users.sql": {
+"executable": False,
+"content": r"""set echo on;
 set timing on;
 set def on;
  
@@ -1407,11 +1386,10 @@ drop user &1 cascade;
 set echo off;
 exit; 
 """
-    write_file("drop_na_users.sql", content)
-
-
-def generate_do_offline_csh():
-    content = r"""#!/bin/csh
+},
+"do_offline.csh": {
+"executable": True,
+"content": r"""#!/bin/csh
 ####################################################################################################
 ## FILE         : do_offline.csh
 ## VERSION      : 00.02
@@ -1480,11 +1458,10 @@ done:
 error:
 	exit 1
 """
-    write_file("do_offline.csh", content, executable=True)
-
-
-def generate_abakus_rdf_csh():
-    content = r"""#!/bin/csh
+},
+"AbakusRDF.csh": {
+"executable": True,
+"content": r"""#!/bin/csh
  
 #abakus.csh 310 R1 N 311 R0 Y eu2013q1 results
  
@@ -1571,11 +1548,10 @@ echo ---------------------------------------------------------------------------
 echo `date`: Abakus RDF End
 echo ---------------------------------------------------------------------------
 """
-    write_file("AbakusRDF.csh", content, executable=True)
-
-
-def generate_space_calculate_sql():
-    content = r"""set echo off
+},
+"space_calculate.sql": {
+"executable": False,
+"content": r"""set echo off
 set verify off
 set termout on
 set heading off
@@ -1605,11 +1581,10 @@ group BY DS.OWNER;
 spool off
 exit;
 """
-    write_file("space_calculate.sql", content)
-
-
-def generate_drop_users_sql():
-    content = r"""set echo on;
+},
+"drop_users.sql": {
+"executable": False,
+"content": r"""set echo on;
 set timing on;
 set def on;
  
@@ -1724,11 +1699,10 @@ drop user ADAS_TR_311 CASCADE;
 set echo off;
 exit; 
 """
-    write_file("drop_users.sql", content)
-
-
-def generate_abakus_svf_csh():
-    content = r"""#!/bin/csh
+},
+"AbakusSVF.sql": {
+"executable": True,
+"content": r"""#!/bin/csh
  
 # WEU -> ABAKUS SVF for: ach achm   bnl bnlm   fall fallm   gall gallm   i im   sc scm   sp spm   uk ukm
  
@@ -1850,7 +1824,7 @@ echo 'Total number of Count compare' >> AbakusCopy.log
 grep -c "The result is located at" AbakusCompare.log >> AbakusCopy.log
 echo 'Total number of Count results unique' >> AbakusCopy.log
 grep "The result is located at" AbakusCount.log | sort -u | wc -l >> AbakusCopy.log
-echo 'Total number of Count compare uniquie' >> AbakusCopy.log
+echo 'Total number of Count compare uniquie' >> AbakasCopy.log
 grep "The result is located at" AbakusCompare.log | sort -u | wc -l >> AbakusCopy.log
  
 set TIMESTAMP = `date +%Y%b%d_%Hh%Mm%Ss`
@@ -1886,11 +1860,10 @@ echo ---------------------------------------------------------------------------
 echo `date`: Abakus SVF End
 echo ---------------------------------------------------------------------------
 """
-    write_file("AbakusSVF.csh", content, executable=True)
-
-
-def generate_python_wrapper():
-    content = r"""#!/bin/csh
+},
+"python_wrapper": {
+"executable": True,
+"content": r"""#!/bin/csh
  
 # The following is needed to force usage of the 32bit version of the OCI
 # which is needed by the Arriba test with sqlite
@@ -1956,11 +1929,10 @@ echo LD_LIBRARY_PATH has been set to $LD_LIBRARY_PATH
  
 # ./python_wrapper setup.py build
 """
-    write_file("python_wrapper", content, executable=True)
-
-
-def generate_runut():
-    content = r"""#!/bin/sh
+},
+"runUT": {
+"executable": True,
+"content": r"""#!/bin/sh
  
 # 610
 RDF_COMPILER=/PROJ/db4/db/RDF/NA/2026Q1/2025R4_RDF_North_America_251H0/610/Scripts/compiler
@@ -1974,7 +1946,7 @@ if  echo "$os" |grep -i Linux ; then
 	 ORACLE_HOME=/PROJ/db4/sviissql/app/oracle/product/client/linux/x86_64/11.2.0
 elif echo "$os" |grep -i SunOS ; then
 	ORACLE_HOME=/PROJ/sviissql/app/oracle/product/client/sunos/sparc/10.2.0
-else echo"OS Exception: This operating system is other than Linux/SunOS!"
+else echo"OS Exception: This operating sistem is other then Linux/SunOS!"
 fi
  
 export USER_SFX=$1
@@ -1985,9 +1957,52 @@ export LD_LIBRARY_PATH
 ###  VW WEU: ->> dca2 dca3 DNK dca4 FIN dca5 I NOR SC SP SWE UK RDF_WEU
  
 ### RDF NA
-python_wrapper $RDF_COMPILER/gdfConvert/util/ut/ut.py  --test_user  rdf_na_610 --spec_id 1804 --test_password nt\#r2g2nsB --test_service lizard1 --user_types "rdf" --trun_context PRODUCTION --trun_label "SVF_KW22_13: rdf_na_$USER_SFX" --root_path $RDF_COMPILER/gdfConvert/util/ut/test_case_root --maxThreads 20 --loc 3 --report_with_variables_list --report_format excel_csv --report_file_name "rdf_na_$USER_SFX.csv" --log_file_name "rdf_na_$USER_SFX.log" --timeout 2000 --property_user "navdb_ro" --property_dsn "(DESCRIPTION=(ADDRESS_LIST=(ADDRESS=(PROTOCOL=TCP)(HOST=euxb009s.eux.de.int.automotive-wan.com)(PORT=1521)(SEND_BUF_SIZE=)(RECV_BUF_SIZE=))(LOAD_BALANCE=yes))(CONNECT_DATA=(SERVICE_NAME=stemppo_1_p_pdb.eux.de.int.automotive-wan.com)))" --property_password "navdb#r2g2nsb" --report_columns "Case+No.,ID,Expr.+No.,UT_Name,Filename,Line+No.,Backend,Work+Package,Tags,Requirements,Conducted,Passed,Timed+out,Elapsed+[s],Excep.,Var.+uninitialized,Var.+defaulted,Filtered+by+Variable,Cond.+Match,LOC,Severity+(0CBAS),Log+Text,Statement+-+unparsed,Statement+-+PARSED,Orig.+Expr.,Parsed+Expr.,Result+(max.+10+rows),Exception+Text,Type,Qualifier,Orig.+Cond.,Parsed+Cond.,Starttime,Endtime,Dbname+Match,Prod.+Match,Suppl.+Match,U+Match,LOC+Match,ID+Match,Filename+Match"
+python_wrapper $RDF_COMPILER/gdfConvert/util/ut/ut.py  --test_user  rdf_na_610 --spec_id 1804       --test_password nt\#r2g2nsB --test_service lizard1 --user_types "rdf" --trun_context PRODUCTION --trun_label "SVF_KW22_13: rdf_na_$USER_SFX" --root_path $RDF_COMPILER/gdfConvert/util/ut/test_case_root --maxThreads 20 --loc 3 --report_with_variables_list --report_format excel_csv --report_file_name "rdf_na_$USER_SFX.csv" --log_file_name "rdf_na_$USER_SFX.log" --timeout 2000 --property_user "navdb_ro" --property_dsn "(DESCRIPTION=(ADDRESS_LIST=(ADDRESS=(PROTOCOL=TCP)(HOST=euxb009s.eux.de.int.automotive-wan.com)(PORT=1521)(SEND_BUF_SIZE=)(RECV_BUF_SIZE=))(LOAD_BALANCE=yes))(CONNECT_DATA=(SERVICE_NAME=stemppo_1_p_pdb.eux.de.int.automotive-wan.com)))" --property_password "navdb#r2g2nsb" --report_columns "Case+No.,ID,Expr.+No.,UT_Name,Filename,Line+No.,Backend,Work+Package,Tags,Requirements,Conducted,Passed,Timed+out,Elapsed+[s],Excep.,Var.+uninitialized,Var.+defaulted,Filtered+by+Variable,Cond.+Match,LOC,Severity+(0CBAS),Log+Text,Statement+-+unparsed,Statement+-+PARSED,Orig.+Expr.,Parsed+Expr.,Result+(max.+10+rows),Exception+Text,Type,Qualifier,Orig.+Cond.,Parsed+Cond.,Starttime,Endtime,Dbname+Match,Prod.+Match,Suppl.+Match,U+Match,LOC+Match,ID+Match,Filename+Match"
+ 
+python_wrapper $RDF_COMPILER/gdfConvert/util/ut/ut.py  --test_user  svf_dca2_610 --spec_id 1804      --test_password nt\#r2g2nsB --test_service lizard1 --user_types "svf,rdf+svf" --trun_context PRODUCTION --trun_label "SVF_KW22_13: svf_dca2_$USER_SFX" --root_path $RDF_COMPILER/gdfConvert/util/ut/test_case_root --maxThreads 20 --loc 3 --report_with_variables_list --report_format excel_csv --report_file_name "svf_dca2_$USER_SFX.csv" --log_file_name "svf_dca2_$USER_SFX.log" --timeout 2000 --property_user "navdb_ro" --property_dsn "(DESCRIPTION=(ADDRESS_LIST=(ADDRESS=(PROTOCOL=TCP)(HOST=euxb009s.eux.de.int.automotive-wan.com)(PORT=1521)(SEND_BUF_SIZE=)(RECV_BUF_SIZE=))(LOAD_BALANCE=yes))(CONNECT_DATA=(SERVICE_NAME=stemppo_1_p_pdb.eux.de.int.automotive-wan.com)))" --property_password "navdb#r2g2nsb" --report_columns "Case+No.,ID,Expr.+No.,UT_Name,Filename,Line+No.,Backend,Work+Package,Tags,Requirements,Conducted,Passed,Timed+out,Elapsed+[s],Excep.,Var.+uninitialized,Var.+defaulted,Filtered+by+Variable,Cond.+Match,LOC,Severity+(0CBAS),Log+Text,Statement+-+unparsed,Statement+-+PARSED,Orig.+Expr.,Parsed+Expr.,Result+(max.+10+rows),Exception+Text,Type,Qualifier,Orig.+Cond.,Parsed+Cond.,Starttime,Endtime,Dbname+Match,Prod.+Match,Suppl.+Match,U+Match,LOC+Match,ID+Match,Filename+Match"
+ 
+python_wrapper $RDF_COMPILER/gdfConvert/util/ut/ut.py  --test_user  svf_dca3_610 --spec_id 1804     --test_password nt\#r2g2nsB --test_service lizard1 --user_types "svf,rdf+svf" --trun_context PRODUCTION --trun_label "SVF_KW22_13: svf_dca3_$USER_SFX" --root_path $RDF_COMPILER/gdfConvert/util/ut/test_case_root --maxThreads 20 --loc 3 --report_with_variables_list --report_format excel_csv --report_file_name "svf_dca3_$USER_SFX.csv" --log_file_name "svf_dca3_$USER_SFX.log" --timeout 2000 --property_user "navdb_ro" --property_dsn "(DESCRIPTION=(ADDRESS_LIST=(ADDRESS=(PROTOCOL=TCP)(HOST=euxb009s.eux.de.int.automotive-wan.com)(PORT=1521)(SEND_BUF_SIZE=)(RECV_BUF_SIZE=))(LOAD_BALANCE=yes))(CONNECT_DATA=(SERVICE_NAME=stemppo_1_p_pdb.eux.de.int.automotive-wan.com)))" --property_password "navdb#r2g2nsb" --report_columns "Case+No.,ID,Expr.+No.,UT_Name,Filename,Line+No.,Backend,Work+Package,Tags,Requirements,Conducted,Passed,Timed+out,Elapsed+[s],Excep.,Var.+uninitialized,Var.+defaulted,Filtered+by+Variable,Cond.+Match,LOC,Severity+(0CBAS),Log+Text,Statement+-+unparsed,Statement+-+PARSED,Orig.+Expr.,Parsed+Expr.,Result+(max.+10+rows),Exception+Text,Type,Qualifier,Orig.+Cond.,Parsed+Cond.,Starttime,Endtime,Dbname+Match,Prod.+Match,Suppl.+Match,U+Match,LOC+Match,ID+Match,Filename+Match"
 
-python_wrapper $RDF_COMPILER/gdfConvert/util/ut/ut.py  --test_user  svf_dca2_610 --spec_id 1804 --test_password nt\#r2g2nsB --test_service lizard1 --user_types "svf,rdf+svf" --trun_context PRODUCTION --trun_label "SVF_KW22_13: svf_dca2_$USER_SFX" --root_path $RDF_COMPILER/gdfConvert/util/ut/test_case_root --maxThreads 20 --loc 3 --report_with_variables_list --report_format excel_csv --report_file_name "svf_dca2_$USER_SFX.csv" --log_file_name "svf_dca2_$USER_SFX.log" --timeout 2000 --property_user "navdb_ro" --property_dsn "(DESCRIPTION=(ADDRESS_LIST=(ADDRESS=(PROTOCOL=TCP)(HOST=euxb009s.eux.de.int.automotive-wan.com)(PORT=1521)(SEND_BUF_SIZE=)(RECV_BUF_SIZE=))(LOAD_BALANCE=yes))(CONNECT_DATA=(SERVICE_NAME=stemppo_1_p_pdb.eux.de.int.automotive-wan.com)))" --property_password "navdb#r2g2nsb" --report_columns "Case+No.,ID,Expr.+No.,UT_Name,Filename,Line+No.,Backend,Work+Package,Tags,Requirements,Conducted,Passed,Timed+out,Elapsed+[s],Excep.,Var.+uninitialized,Var.+defaulted,Filtered+by+Variable,Cond.+Match,LOC,Severity+(0CBAS),Log+Text,Statement+-+unparsed,Statement+-+PARSED,Orig.+Expr.,Parsed+Expr.,Result+(max.+10+rows),Exception+Text,Type,Qualifier,Orig.+Cond.,Parsed+Cond.,Starttime,Endtime,Dbname+Match,Prod.+Match,Suppl.+Match,U+Match,LOC+Match,ID+Match,Filename+Match"
+python_wrapper $RDF_COMPILER/gdfConvert/util/ut/ut.py  --test_user  svf_dca4_610 --spec_id 1804     --test_password nt\#r2g2nsB --test_service lizard1 --user_types "svf,rdf+svf" --trun_context PRODUCTION --trun_label "SVF_KW22_13: svf_dca4_$USER_SFX" --root_path $RDF_COMPILER/gdfConvert/util/ut/test_case_root --maxThreads 20 --loc 3 --report_with_variables_list --report_format excel_csv --report_file_name "svf_dca4_$USER_SFX.csv" --log_file_name "svf_dca4_$USER_SFX.log" --timeout 2000 --property_user "navdb_ro" --property_dsn "(DESCRIPTION=(ADDRESS_LIST=(ADDRESS=(PROTOCOL=TCP)(HOST=euxb009s.eux.de.int.automotive-wan.com)(PORT=1521)(SEND_BUF_SIZE=)(RECV_BUF_SIZE=))(LOAD_BALANCE=yes))(CONNECT_DATA=(SERVICE_NAME=stemppo_1_p_pdb.eux.de.int.automotive-wan.com)))" --property_password "navdb#r2g2nsb" --report_columns "Case+No.,ID,Expr.+No.,UT_Name,Filename,Line+No.,Backend,Work+Package,Tags,Requirements,Conducted,Passed,Timed+out,Elapsed+[s],Excep.,Var.+uninitialized,Var.+defaulted,Filtered+by+Variable,Cond.+Match,LOC,Severity+(0CBAS),Log+Text,Statement+-+unparsed,Statement+-+PARSED,Orig.+Expr.,Parsed+Expr.,Result+(max.+10+rows),Exception+Text,Type,Qualifier,Orig.+Cond.,Parsed+Cond.,Starttime,Endtime,Dbname+Match,Prod.+Match,Suppl.+Match,U+Match,LOC+Match,ID+Match,Filename+Match"
+ 
+python_wrapper $RDF_COMPILER/gdfConvert/util/ut/ut.py  --test_user  svf_dca5_610 --spec_id 1804     --test_password nt\#r2g2nsB --test_service lizard1 --user_types "svf,rdf+svf" --trun_context PRODUCTION --trun_label "SVF_KW22_13: svf_dca5_$USER_SFX" --root_path $RDF_COMPILER/gdfConvert/util/ut/test_case_root --maxThreads 20 --loc 3 --report_with_variables_list --report_format excel_csv --report_file_name "svf_dca5_$USER_SFX.csv" --log_file_name "svf_dca5_$USER_SFX.log" --timeout 2000 --property_user "navdb_ro" --property_dsn "(DESCRIPTION=(ADDRESS_LIST=(ADDRESS=(PROTOCOL=TCP)(HOST=euxb009s.eux.de.int.automotive-wan.com)(PORT=1521)(SEND_BUF_SIZE=)(RECV_BUF_SIZE=))(LOAD_BALANCE=yes))(CONNECT_DATA=(SERVICE_NAME=stemppo_1_p_pdb.eux.de.int.automotive-wan.com)))" --property_password "navdb#r2g2nsb" --report_columns "Case+No.,ID,Expr.+No.,UT_Name,Filename,Line+No.,Backend,Work+Package,Tags,Requirements,Conducted,Passed,Timed+out,Elapsed+[s],Excep.,Var.+uninitialized,Var.+defaulted,Filtered+by+Variable,Cond.+Match,LOC,Severity+(0CBAS),Log+Text,Statement+-+unparsed,Statement+-+PARSED,Orig.+Expr.,Parsed+Expr.,Result+(max.+10+rows),Exception+Text,Type,Qualifier,Orig.+Cond.,Parsed+Cond.,Starttime,Endtime,Dbname+Match,Prod.+Match,Suppl.+Match,U+Match,LOC+Match,ID+Match,Filename+Match"
+ 
+python_wrapper $RDF_COMPILER/gdfConvert/util/ut/ut.py  --test_user  svf_dca6_610 --spec_id 1804     --test_password nt\#r2g2nsB --test_service lizard1 --user_types "svf,rdf+svf" --trun_context PRODUCTION --trun_label "SVF_KW22_13: svf_dca6_$USER_SFX" --root_path $RDF_COMPILER/gdfConvert/util/ut/test_case_root --maxThreads 20 --loc 3 --report_with_variables_list --report_format excel_csv --report_file_name "svf_dca6_$USER_SFX.csv" --log_file_name "svf_dca6_$USER_SFX.log" --timeout 2000 --property_user "navdb_ro" --property_dsn "(DESCRIPTION=(ADDRESS_LIST=(ADDRESS=(PROTOCOL=TCP)(HOST=euxb009s.eux.de.int.automotive-wan.com)(PORT=1521)(SEND_BUF_SIZE=)(RECV_BUF_SIZE=))(LOAD_BALANCE=yes))(CONNECT_DATA=(SERVICE_NAME=stemppo_1_p_pdb.eux.de.int.automotive-wan.com)))" --property_password "navdb#r2g2nsb" --report_columns "Case+No.,ID,Expr.+No.,UT_Name,Filename,Line+No.,Backend,Work+Package,Tags,Requirements,Conducted,Passed,Timed+out,Elapsed+[s],Excep.,Var.+uninitialized,Var.+defaulted,Filtered+by+Variable,Cond.+Match,LOC,Severity+(0CBAS),Log+Text,Statement+-+unparsed,Statement+-+PARSED,Orig.+Expr.,Parsed+Expr.,Result+(max.+10+rows),Exception+Text,Type,Qualifier,Orig.+Cond.,Parsed+Cond.,Starttime,Endtime,Dbname+Match,Prod.+Match,Suppl.+Match,U+Match,LOC+Match,ID+Match,Filename+Match"
+ 
+python_wrapper $RDF_COMPILER/gdfConvert/util/ut/ut.py  --test_user  svf_dca7_610 --spec_id 1804     --test_password nt\#r2g2nsB --test_service lizard1 --user_types "svf,rdf+svf" --trun_context PRODUCTION --trun_label "SVF_KW22_13: svf_dca7_$USER_SFX" --root_path $RDF_COMPILER/gdfConvert/util/ut/test_case_root --maxThreads 20 --loc 3 --report_with_variables_list --report_format excel_csv --report_file_name "svf_dca7_$USER_SFX.csv" --log_file_name "svf_dca7_$USER_SFX.log" --timeout 2000 --property_user "navdb_ro" --property_dsn "(DESCRIPTION=(ADDRESS_LIST=(ADDRESS=(PROTOCOL=TCP)(HOST=euxb009s.eux.de.int.automotive-wan.com)(PORT=1521)(SEND_BUF_SIZE=)(RECV_BUF_SIZE=))(LOAD_BALANCE=yes))(CONNECT_DATA=(SERVICE_NAME=stemppo_1_p_pdb.eux.de.int.automotive-wan.com)))" --property_password "navdb#r2g2nsb" --report_columns "Case+No.,ID,Expr.+No.,UT_Name,Filename,Line+No.,Backend,Work+Package,Tags,Requirements,Conducted,Passed,Timed+out,Elapsed+[s],Excep.,Var.+uninitialized,Var.+defaulted,Filtered+by+Variable,Cond.+Match,LOC,Severity+(0CBAS),Log+Text,Statement+-+unparsed,Statement+-+PARSED,Orig.+Expr.,Parsed+Expr.,Result+(max.+10+rows),Exception+Text,Type,Qualifier,Orig.+Cond.,Parsed+Cond.,Starttime,Endtime,Dbname+Match,Prod.+Match,Suppl.+Match,U+Match,LOC+Match,ID+Match,Filename+Match"
+ 
+python_wrapper $RDF_COMPILER/gdfConvert/util/ut/ut.py  --test_user  svf_dca8_610 --spec_id 1804     --test_password nt\#r2g2nsB --test_service lizard1 --user_types "svf,rdf+svf" --trun_context PRODUCTION --trun_label "SVF_KW22_13: svf_dca8_$USER_SFX" --root_path $RDF_COMPILER/gdfConvert/util/ut/test_case_root --maxThreads 20 --loc 3 --report_with_variables_list --report_format excel_csv --report_file_name "svf_dca8_$USER_SFX.csv" --log_file_name "svf_dca8_$USER_SFX.log" --timeout 2000 --property_user "navdb_ro" --property_dsn "(DESCRIPTION=(ADDRESS_LIST=(ADDRESS=(PROTOCOL=TCP)(HOST=euxb009s.eux.de.int.automotive-wan.com)(PORT=1521)(SEND_BUF_SIZE=)(RECV_BUF_SIZE=))(LOAD_BALANCE=yes))(CONNECT_DATA=(SERVICE_NAME=stemppo_1_p_pdb.eux.de.int.automotive-wan.com)))" --property_password "navdb#r2g2nsb" --report_columns "Case+No.,ID,Expr.+No.,UT_Name,Filename,Line+No.,Backend,Work+Package,Tags,Requirements,Conducted,Passed,Timed+out,Elapsed+[s],Excep.,Var.+uninitialized,Var.+defaulted,Filtered+by+Variable,Cond.+Match,LOC,Severity+(0CBAS),Log+Text,Statement+-+unparsed,Statement+-+PARSED,Orig.+Expr.,Parsed+Expr.,Result+(max.+10+rows),Exception+Text,Type,Qualifier,Orig.+Cond.,Parsed+Cond.,Starttime,Endtime,Dbname+Match,Prod.+Match,Suppl.+Match,U+Match,LOC+Match,ID+Match,Filename+Match"
+
+python_wrapper $RDF_COMPILER/gdfConvert/util/ut/ut.py  --test_user  svf_dca9_610 --spec_id 1804    --test_password nt\#r2g2nsB --test_service lizard1 --user_types "svf,rdf+svf" --trun_context PRODUCTION --trun_label "SVF_KW22_13: svf_dca9_$USER_SFX" --root_path $RDF_COMPILER/gdfConvert/util/ut/test_case_root --maxThreads 20 --loc 3 --report_with_variables_list --report_format excel_csv --report_file_name "svf_dca9_$USER_SFX.csv" --log_file_name "svf_dca9_$USER_SFX.log" --timeout 2000 --property_user "navdb_ro" --property_dsn "(DESCRIPTION=(ADDRESS_LIST=(ADDRESS=(PROTOCOL=TCP)(HOST=euxb009s.eux.de.int.automotive-wan.com)(PORT=1521)(SEND_BUF_SIZE=)(RECV_BUF_SIZE=))(LOAD_BALANCE=yes))(CONNECT_DATA=(SERVICE_NAME=stemppo_1_p_pdb.eux.de.int.automotive-wan.com)))" --property_password "navdb#r2g2nsb" --report_columns "Case+No.,ID,Expr.+No.,UT_Name,Filename,Line+No.,Backend,Work+Package,Tags,Requirements,Conducted,Passed,Timed+out,Elapsed+[s],Excep.,Var.+uninitialized,Var.+defaulted,Filtered+by+Variable,Cond.+Match,LOC,Severity+(0CBAS),Log+Text,Statement+-+unparsed,Statement+-+PARSED,Orig.+Expr.,Parsed+Expr.,Result+(max.+10+rows),Exception+Text,Type,Qualifier,Orig.+Cond.,Parsed+Cond.,Starttime,Endtime,Dbname+Match,Prod.+Match,Suppl.+Match,U+Match,LOC+Match,ID+Match,Filename+Match"
+ 
+python_wrapper $RDF_COMPILER/gdfConvert/util/ut/ut.py  --test_user  svf_dca10_610 --spec_id 1804    --test_password nt\#r2g2nsB --test_service lizard1 --user_types "svf,rdf+svf" --trun_context PRODUCTION --trun_label "SVF_KW22_13: svf_dca10_$USER_SFX" --root_path $RDF_COMPILER/gdfConvert/util/ut/test_case_root --maxThreads 20 --loc 3 --report_with_variables_list --report_format excel_csv --report_file_name "svf_dca10_$USER_SFX.csv" --log_file_name "svf_dca10_$USER_SFX.log" --timeout 2000 --property_user "navdb_ro" --property_dsn "(DESCRIPTION=(ADDRESS_LIST=(ADDRESS=(PROTOCOL=TCP)(HOST=euxb009s.eux.de.int.automotive-wan.com)(PORT=1521)(SEND_BUF_SIZE=)(RECV_BUF_SIZE=))(LOAD_BALANCE=yes))(CONNECT_DATA=(SERVICE_NAME=stemppo_1_p_pdb.eux.de.int.automotive-wan.com)))" --property_password "navdb#r2g2nsb" --report_columns "Case+No.,ID,Expr.+No.,UT_Name,Filename,Line+No.,Backend,Work+Package,Tags,Requirements,Conducted,Passed,Timed+out,Elapsed+[s],Excep.,Var.+uninitialized,Var.+defaulted,Filtered+by+Variable,Cond.+Match,LOC,Severity+(0CBAS),Log+Text,Statement+-+unparsed,Statement+-+PARSED,Orig.+Expr.,Parsed+Expr.,Result+(max.+10+rows),Exception+Text,Type,Qualifier,Orig.+Cond.,Parsed+Cond.,Starttime,Endtime,Dbname+Match,Prod.+Match,Suppl.+Match,U+Match,LOC+Match,ID+Match,Filename+Match"
+ 
+python_wrapper $RDF_COMPILER/gdfConvert/util/ut/ut.py  --test_user  svf_dca11_610 --spec_id 1804 	--test_password nt\#r2g2nsB --test_service lizard1 --user_types "svf,rdf+svf" --trun_context PRODUCTION --trun_label "SVF_KW22_13: svf_dca11_$USER_SFX" --root_path $RDF_COMPILER/gdfConvert/util/ut/test_case_root --maxThreads 20 --loc 3 --report_with_variables_list --report_format excel_csv --report_file_name "svf_dca11_$USER_SFX.csv" --log_file_name "svf_dca11_$USER_SFX.log" --timeout 2000 --property_user "navdb_ro" --property_dsn "(DESCRIPTION=(ADDRESS_LIST=(ADDRESS=(PROTOCOL=TCP)(HOST=euxb009s.eux.de.int.automotive-wan.com)(PORT=1521)(SEND_BUF_SIZE=)(RECV_BUF_SIZE=))(LOAD_BALANCE=yes))(CONNECT_DATA=(SERVICE_NAME=stemppo_1_p_pdb.eux.de.int.automotive-wan.com)))" --property_password "navdb#r2g2nsb" --report_columns "Case+No.,ID,Expr.+No.,UT_Name,Filename,Line+No.,Backend,Work+Package,Tags,Requirements,Conducted,Passed,Timed+out,Elapsed+[s],Excep.,Var.+uninitialized,Var.+defaulted,Filtered+by+Variable,Cond.+Match,LOC,Severity+(0CBAS),Log+Text,Statement+-+unparsed,Statement+-+PARSED,Orig.+Expr.,Parsed+Expr.,Result+(max.+10+rows),Exception+Text,Type,Qualifier,Orig.+Cond.,Parsed+Cond.,Starttime,Endtime,Dbname+Match,Prod.+Match,Suppl.+Match,U+Match,LOC+Match,ID+Match,Filename+Match"
+ 
+python_wrapper $RDF_COMPILER/gdfConvert/util/ut/ut.py   --test_user  svf_dca12_610 --spec_id 1804	--test_password nt\#r2g2nsB --test_service lizard1 --user_types "svf,rdf+svf" --trun_context PRODUCTION --trun_label "SVF_KW22_13: svf_dca12_$USER_SFX" --root_path $RDF_COMPILER/gdfConvert/util/ut/test_case_root --maxThreads 20 --loc 3 --report_with_variables_list --report_format excel_csv --report_file_name "svf_dca12_$USER_SFX.csv" --log_file_name "svf_dca12_$USER_SFX.log" --timeout 2000 --property_user "navdb_ro" --property_dsn "(DESCRIPTION=(ADDRESS_LIST=(ADDRESS=(PROTOCOL=TCP)(HOST=euxb009s.eux.de.int.automotive-wan.com)(PORT=1521)(SEND_BUF_SIZE=)(RECV_BUF_SIZE=))(LOAD_BALANCE=yes))(CONNECT_DATA=(SERVICE_NAME=stemppo_1_p_pdb.eux.de.int.automotive-wan.com)))" --property_password "navdb#r2g2nsb" --report_columns "Case+No.,ID,Expr.+No.,UT_Name,Filename,Line+No.,Backend,Work+Package,Tags,Requirements,Conducted,Passed,Timed+out,Elapsed+[s],Excep.,Var.+uninitialized,Var.+defaulted,Filtered+by+Variable,Cond.+Match,LOC,Severity+(0CBAS),Log+Text,Statement+-+unparsed,Statement+-+PARSED,Orig.+Expr.,Parsed+Expr.,Result+(max.+10+rows),Exception+Text,Type,Qualifier,Orig.+Cond.,Parsed+Cond.,Starttime,Endtime,Dbname+Match,Prod.+Match,Suppl.+Match,U+Match,LOC+Match,ID+Match,Filename+Match"
+ 
+python_wrapper $RDF_COMPILER/gdfConvert/util/ut/ut.py   --test_user	 svf_dca13_610 --spec_id 1804	--test_password nt\#r2g2nsB --test_service lizard1 --user_types "svf,rdf+svf" --trun_context PRODUCTION --trun_label "SVF_KW22_13: svf_dca13_$USER_SFX" --root_path $RDF_COMPILER/gdfConvert/util/ut/test_case_root --maxThreads 20 --loc 3 --report_with_variables_list --report_format excel_csv --report_file_name "svf_dca13_$USER_SFX.csv" --log_file_name "svf_dca13_$USER_SFX.log" --timeout 2000 --property_user "navdb_ro" --property_dsn "(DESCRIPTION=(ADDRESS_LIST=(ADDRESS=(PROTOCOL=TCP)(HOST=euxb009s.eux.de.int.automotive-wan.com)(PORT=1521)(SEND_BUF_SIZE=)(RECV_BUF_SIZE=))(LOAD_BALANCE=yes))(CONNECT_DATA=(SERVICE_NAME=stemppo_1_p_pdb.eux.de.int.automotive-wan.com)))" --property_password "navdb#r2g2nsb" --report_columns "Case+No.,ID,Expr.+No.,UT_Name,Filename,Line+No.,Backend,Work+Package,Tags,Requirements,Conducted,Passed,Timed+out,Elapsed+[s],Excep.,Var.+uninitialized,Var.+defaulted,Filtered+by+Variable,Cond.+Match,LOC,Severity+(0CBAS),Log+Text,Statement+-+unparsed,Statement+-+PARSED,Orig.+Expr.,Parsed+Expr.,Result+(max.+10+rows),Exception+Text,Type,Qualifier,Orig.+Cond.,Parsed+Cond.,Starttime,Endtime,Dbname+Match,Prod.+Match,Suppl.+Match,U+Match,LOC+Match,ID+Match,Filename+Match"
+ 
+python_wrapper $RDF_COMPILER/gdfConvert/util/ut/ut.py   --test_user  svf_dca14_610 --spec_id 1804	--test_password nt\#r2g2nsB --test_service lizard1 --user_types "svf,rdf+svf" --trun_context PRODUCTION --trun_label "SVF_KW22_13: svf_dca14_$USER_SFX" --root_path $RDF_COMPILER/gdfConvert/util/ut/test_case_root --maxThreads 20 --loc 3 --report_with_variables_list --report_format excel_csv --report_file_name "svf_dca14_$USER_SFX.csv" --log_file_name "svf_dca14_$USER_SFX.log" --timeout 2000 --property_user "navdb_ro" --property_dsn "(DESCRIPTION=(ADDRESS_LIST=(ADDRESS=(PROTOCOL=TCP)(HOST=euxb009s.eux.de.int.automotive-wan.com)(PORT=1521)(SEND_BUF_SIZE=)(RECV_BUF_SIZE=))(LOAD_BALANCE=yes))(CONNECT_DATA=(SERVICE_NAME=stemppo_1_p_pdb.eux.de.int.automotive-wan.com)))" --property_password "navdb#r2g2nsb" --report_columns "Case+No.,ID,Expr.+No.,UT_Name,Filename,Line+No.,Backend,Work+Package,Tags,Requirements,Conducted,Passed,Timed+out,Elapsed+[s],Excep.,Var.+uninitialized,Var.+defaulted,Filtered+by+Variable,Cond.+Match,LOC,Severity+(0CBAS),Log+Text,Statement+-+unparsed,Statement+-+PARSED,Orig.+Expr.,Parsed+Expr.,Result+(max.+10+rows),Exception+Text,Type,Qualifier,Orig.+Cond.,Parsed+Cond.,Starttime,Endtime,Dbname+Match,Prod.+Match,Suppl.+Match,U+Match,LOC+Match,ID+Match,Filename+Match"
+ 
+python_wrapper $RDF_COMPILER/gdfConvert/util/ut/ut.py   --test_user	 svf_dca1_610 --spec_id 1804  	--test_password nt\#r2g2nsB --test_service lizard1 --user_types "svf,rdf+svf" --trun_context PRODUCTION --trun_label "SVF_KW22_13: svf_dca1_$USER_SFX" --root_path $RDF_COMPILER/gdfConvert/util/ut/test_case_root --maxThreads 20 --loc 3 --report_with_variables_list --report_format excel_csv --report_file_name "svf_dca1_$USER_SFX.csv" --log_file_name "svf_dca1_$USER_SFX.log" --timeout 2000 --property_user "navdb_ro" --property_dsn "(DESCRIPTION=(ADDRESS_LIST=(ADDRESS=(PROTOCOL=TCP)(HOST=euxb009s.eux.de.int.automotive-wan.com)(PORT=1521)(SEND_BUF_SIZE=)(RECV_BUF_SIZE=))(LOAD_BALANCE=yes))(CONNECT_DATA=(SERVICE_NAME=stemppo_1_p_pdb.eux.de.int.automotive-wan.com)))" --property_password "navdb#r2g2nsb" --report_columns "Case+No.,ID,Expr.+No.,UT_Name,Filename,Line+No.,Backend,Work+Package,Tags,Requirements,Conducted,Passed,Timed+out,Elapsed+[s],Excep.,Var.+uninitialized,Var.+defaulted,Filtered+by+Variable,Cond.+Match,LOC,Severity+(0CBAS),Log+Text,Statement+-+unparsed,Statement+-+PARSED,Orig.+Expr.,Parsed+Expr.,Result+(max.+10+rows),Exception+Text,Type,Qualifier,Orig.+Cond.,Parsed+Cond.,Starttime,Endtime,Dbname+Match,Prod.+Match,Suppl.+Match,U+Match,LOC+Match,ID+Match,Filename+Match"
+ 
+python_wrapper $RDF_COMPILER/gdfConvert/util/ut/ut.py  --test_user  svf_mex_610 --spec_id 1804   	--test_password nt\#r2g2nsB --test_service lizard1 --user_types "svf,rdf+svf" --trun_context PRODUCTION --trun_label "SVF_KW22_13: svf_mex_$USER_SFX" --root_path $RDF_COMPILER/gdfConvert/util/ut/test_case_root --maxThreads 20 --loc 3 --report_with_variables_list --report_format excel_csv --report_file_name "svf_mex_$USER_SFX.csv" --log_file_name "svf_mex_$USER_SFX.log" --timeout 2000 --property_user "navdb_ro" --property_dsn "(DESCRIPTION=(ADDRESS_LIST=(ADDRESS=(PROTOCOL=TCP)(HOST=euxb009s.eux.de.int.automotive-wan.com)(PORT=1521)(SEND_BUF_SIZE=)(RECV_BUF_SIZE=))(LOAD_BALANCE=yes))(CONNECT_DATA=(SERVICE_NAME=stemppo_1_p_pdb.eux.de.int.automotive-wan.com)))" --property_password "navdb#r2g2nsb" --report_columns "Case+No.,ID,Expr.+No.,UT_Name,Filename,Line+No.,Backend,Work+Package,Tags,Requirements,Conducted,Passed,Timed+out,Elapsed+[s],Excep.,Var.+uninitialized,Var.+defaulted,Filtered+by+Variable,Cond.+Match,LOC,Severity+(0CBAS),Log+Text,Statement+-+unparsed,Statement+-+PARSED,Orig.+Expr.,Parsed+Expr.,Result+(max.+10+rows),Exception+Text,Type,Qualifier,Orig.+Cond.,Parsed+Cond.,Starttime,Endtime,Dbname+Match,Prod.+Match,Suppl.+Match,U+Match,LOC+Match,ID+Match,Filename+Match"
+ 
+python_wrapper $RDF_COMPILER/gdfConvert/util/ut/ut.py   --test_user  svf_dca15_610 --spec_id 1804	--test_password nt\#r2g2nsB --test_service lizard1 --user_types "svf,rdf+svf" --trun_context PRODUCTION --trun_label "SVF_KW22_13: svf_dca15_$USER_SFX" --root_path $RDF_COMPILER/gdfConvert/util/ut/test_case_root --maxThreads 20 --loc 3 --report_with_variables_list --report_format excel_csv --report_file_name "svf_dca15_$USER_SFX.csv" --log_file_name "svf_dca15_$USER_SFX.log" --timeout 2000 --property_user "navdb_ro" --property_dsn "(DESCRIPTION=(ADDRESS_LIST=(ADDRESS=(PROTOCOL=TCP)(HOST=euxb009s.eux.de.int.automotive-wan.com)(PORT=1521)(SEND_BUF_SIZE=)(RECV_BUF_SIZE=))(LOAD_BALANCE=yes))(CONNECT_DATA=(SERVICE_NAME=stemppo_1_p_pdb.eux.de.int.automotive-wan.com)))" --property_password "navdb#r2g2nsb" --report_columns "Case+No.,ID,Expr.+No.,UT_Name,Filename,Line+No.,Backend,Work+Package,Tags,Requirements,Conducted,Passed,Timed+out,Elapsed+[s],Excep.,Var.+uninitialized,Var.+defaulted,Filtered+by+Variable,Cond.+Match,LOC,Severity+(0CBAS),Log+Text,Statement+-+unparsed,Statement+-+PARSED,Orig.+Expr.,Parsed+Expr.,Result+(max.+10+rows),Exception+Text,Type,Qualifier,Orig.+Cond.,Parsed+Cond.,Starttime,Endtime,Dbname+Match,Prod.+Match,Suppl.+Match,U+Match,LOC+Match,ID+Match,Filename+Match"
 """
-    write_file("runUT", content, executable=True)
+}
+}
 
+def main():
+    for name, meta in files.items():
+        with open(name, 'w', newline='\n') as f:
+            f.write(meta["content"])
+        if meta.get("executable"):
+            st = os.stat(name)
+            os.chmod(name, st.st_mode | stat.S_IEXEC | stat.S_IXGRP | stat.S_IXOTH)
+        print(f"Created: {name}")
+    print("All files generated in: " + os.getcwd())
+
+if __name__ == "__main__":
+    main()
