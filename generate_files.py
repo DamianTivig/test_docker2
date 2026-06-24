@@ -6,7 +6,7 @@ Script to generate all configuration/script files for RDF/SVF pipeline.
 import os
 import stat
 
-def write_file(filename, content, executable=False):
+def write_file(filename, content, executable=False):FFF
     """Write content to a file and optionally make it executable."""
     with open(filename, 'w', newline='\n') as f:
         f.write(content)
@@ -1974,7 +1974,7 @@ if  echo "$os" |grep -i Linux ; then
 	 ORACLE_HOME=/PROJ/db4/sviissql/app/oracle/product/client/linux/x86_64/11.2.0
 elif echo "$os" |grep -i SunOS ; then
 	ORACLE_HOME=/PROJ/sviissql/app/oracle/product/client/sunos/sparc/10.2.0
-else echo"OS Exception: This operating sistem is other then Linux/SunOS!"
+else echo"OS Exception: This operating system is other than Linux/SunOS!"
 fi
  
 export USER_SFX=$1
@@ -1985,6 +1985,9 @@ export LD_LIBRARY_PATH
 ###  VW WEU: ->> dca2 dca3 DNK dca4 FIN dca5 I NOR SC SP SWE UK RDF_WEU
  
 ### RDF NA
-python_wrapper $RDF_COMPILER/gdfConvert/util/ut/ut.py  --test_user  rdf_na_610 --spec_id 1804       --test_password
+python_wrapper $RDF_COMPILER/gdfConvert/util/ut/ut.py  --test_user  rdf_na_610 --spec_id 1804 --test_password nt\#r2g2nsB --test_service lizard1 --user_types "rdf" --trun_context PRODUCTION --trun_label "SVF_KW22_13: rdf_na_$USER_SFX" --root_path $RDF_COMPILER/gdfConvert/util/ut/test_case_root --maxThreads 20 --loc 3 --report_with_variables_list --report_format excel_csv --report_file_name "rdf_na_$USER_SFX.csv" --log_file_name "rdf_na_$USER_SFX.log" --timeout 2000 --property_user "navdb_ro" --property_dsn "(DESCRIPTION=(ADDRESS_LIST=(ADDRESS=(PROTOCOL=TCP)(HOST=euxb009s.eux.de.int.automotive-wan.com)(PORT=1521)(SEND_BUF_SIZE=)(RECV_BUF_SIZE=))(LOAD_BALANCE=yes))(CONNECT_DATA=(SERVICE_NAME=stemppo_1_p_pdb.eux.de.int.automotive-wan.com)))" --property_password "navdb#r2g2nsb" --report_columns "Case+No.,ID,Expr.+No.,UT_Name,Filename,Line+No.,Backend,Work+Package,Tags,Requirements,Conducted,Passed,Timed+out,Elapsed+[s],Excep.,Var.+uninitialized,Var.+defaulted,Filtered+by+Variable,Cond.+Match,LOC,Severity+(0CBAS),Log+Text,Statement+-+unparsed,Statement+-+PARSED,Orig.+Expr.,Parsed+Expr.,Result+(max.+10+rows),Exception+Text,Type,Qualifier,Orig.+Cond.,Parsed+Cond.,Starttime,Endtime,Dbname+Match,Prod.+Match,Suppl.+Match,U+Match,LOC+Match,ID+Match,Filename+Match"
 
+python_wrapper $RDF_COMPILER/gdfConvert/util/ut/ut.py  --test_user  svf_dca2_610 --spec_id 1804 --test_password nt\#r2g2nsB --test_service lizard1 --user_types "svf,rdf+svf" --trun_context PRODUCTION --trun_label "SVF_KW22_13: svf_dca2_$USER_SFX" --root_path $RDF_COMPILER/gdfConvert/util/ut/test_case_root --maxThreads 20 --loc 3 --report_with_variables_list --report_format excel_csv --report_file_name "svf_dca2_$USER_SFX.csv" --log_file_name "svf_dca2_$USER_SFX.log" --timeout 2000 --property_user "navdb_ro" --property_dsn "(DESCRIPTION=(ADDRESS_LIST=(ADDRESS=(PROTOCOL=TCP)(HOST=euxb009s.eux.de.int.automotive-wan.com)(PORT=1521)(SEND_BUF_SIZE=)(RECV_BUF_SIZE=))(LOAD_BALANCE=yes))(CONNECT_DATA=(SERVICE_NAME=stemppo_1_p_pdb.eux.de.int.automotive-wan.com)))" --property_password "navdb#r2g2nsb" --report_columns "Case+No.,ID,Expr.+No.,UT_Name,Filename,Line+No.,Backend,Work+Package,Tags,Requirements,Conducted,Passed,Timed+out,Elapsed+[s],Excep.,Var.+uninitialized,Var.+defaulted,Filtered+by+Variable,Cond.+Match,LOC,Severity+(0CBAS),Log+Text,Statement+-+unparsed,Statement+-+PARSED,Orig.+Expr.,Parsed+Expr.,Result+(max.+10+rows),Exception+Text,Type,Qualifier,Orig.+Cond.,Parsed+Cond.,Starttime,Endtime,Dbname+Match,Prod.+Match,Suppl.+Match,U+Match,LOC+Match,ID+Match,Filename+Match"
+"""
+    write_file("runUT", content, executable=True)
 
