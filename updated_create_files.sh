@@ -2,6 +2,7 @@
 
 set -e
 
+# Ask user for input
 read -p "Enter BASE path: " BASE
 read -p "Enter DELIVERY name: " DELIVERY
 read -p "Enter VERSION: " VERSION
@@ -9,8 +10,13 @@ read -p "Enter VERSION: " VERSION
 REMOTE_USER="uie74356"
 REMOTE_HOST="10.198.127.171"
 REMOTE_BASE="${BASE}/${DELIVERY}/${VERSION}"
-REMOTE_BASE2="${BASE}/${DELIVERY}"
 
+echo "========================================="
+echo "BASE:     ${BASE}"
+echo "DELIVERY: ${DELIVERY}"
+echo "VERSION:  ${VERSION}"
+echo "FULL PATH: ${REMOTE_BASE}"
+echo "========================================="
 echo "Connecting to server..."
 
 # Step 1: Create directory structure
@@ -21,8 +27,8 @@ mkdir -p ${REMOTE_BASE}/Tests/RDF
 mkdir -p ${REMOTE_BASE}/Tests/SIZE
 mkdir -p ${REMOTE_BASE}/Tests/SVF
 mkdir -p ${REMOTE_BASE}/Tests/UT
-mkdir -p ${REMOTE_BASE2}/load/allfiles
-mkdir -p ${REMOTE_BASE2}/load/rdfdeploy
+mkdir -p ${REMOTE_BASE}/Tests/load/allfiles
+mkdir -p ${REMOTE_BASE}/Tests/load/rdfdeploy
 mkdir -p ${REMOTE_BASE}/patches
 echo 'Directory structure created.'
 "
@@ -34,15 +40,120 @@ cat > "$TMPFILE" << 'PYEOF'
 #!/usr/bin/env python3
 """
 Generates all configuration/script files into the correct subdirectories.
-Run this from the VERSION root directory (parent of Scripts/, Tests/).
+Run from the VERSION root directory (parent of Scripts/, Tests/).
+
+Usage:
+    python3 generate_files.py <VERSION> <DELIVERY> <BASE>
+    or via environment variables: VERSION, DELIVERY, BASE
 """
 import os
+import re
 import stat
+import sys
+
+
+# ============================================================
+# PARAMETER HANDLING
+# ============================================================
+
+def get_params():
+    version  = os.environ.get("VERSION")
+    delivery = os.environ.get("DELIVERY")
+    base     = os.environ.get("BASE")
+
+    if len(sys.argv) >= 2 and not version:
+        version = sys.argv[1].strip()
+    if len(sys.argv) >= 3 and not delivery:
+        delivery = sys.argv[2].strip()
+    if len(sys.argv) >= 4 and not base:
+        base = sys.argv[3].strip()
+
+    if not version:
+        version = input("Enter VERSION (e.g., 611): ").strip()
+    if not delivery:
+        delivery = input("Enter DELIVERY (e.g., 2025R4_RDF_North_America_251H0): ").strip()
+    if not base:
+        base = input("Enter BASE (e.g., /PROJ/db4/db/RDF/NA/2026Q1_SeSp): ").strip()
+
+    return version, delivery, base
+
+VERSION, DELIVERY, BASE = get_params()
+
+# Build the full RDF_HOME path
+RDF_HOME = f"{BASE}/{DELIVERY}/{VERSION}"
+
+print(f"  VERSION:  {VERSION}")
+print(f"  DELIVERY: {DELIVERY}")
+print(f"  BASE:     {BASE}")
+print(f"  RDF_HOME: {RDF_HOME}")
+print("")
+
+
+# ============================================================
+# SUBSTITUTION ENGINE
+# ============================================================
+
+def apply_subs(text):
+    """Replace all version numbers and delivery path labels in the text."""
+
+    # Replace DSUFIX assignment: set DSUFIX=611 -> set DSUFIX=<VERSION>
+    text = re.sub(r'(set\s+DSUFIX\s*=\s*)\d{3}\b', r'\g<1>' + VERSION, text)
+
+    # Replace OSUFIX assignment: set OSUFIX=510 -> set OSUFIX=<VERSION-1>
+    # We calculate previous version as VERSION - 101 (e.g., 611 -> 510)
+    try:
+        old_version = str(int(VERSION) - 101)
+        text = re.sub(r'(set\s+OSUFIX\s*=\s*)\d{3}\b', r'\g<1>' + old_version, text)
+        # Also replace OLD DB USER suffix
+        text = re.sub(r'(R2S_RDF_OLD_DB_USER\s*=\s*RDF_[A-Z]+_)\d{3}\b', r'\g<1>' + old_version, text)
+    except ValueError:
+        pass
+
+    # Replace RDF user suffixes: RDF_NA_610 -> RDF_NA_<VERSION>
+    text = re.sub(r'\b(RDF_[A-Z_]+_)\d{3}\b', r'\g<1>' + VERSION, text)
+
+    # Replace SVF user suffixes (uppercase): SVF_DCA2_611 -> SVF_DCA2_<VERSION>
+    text = re.sub(r'\b(SVF_[A-Z0-9]+_)\d{3}\b', r'\g<1>' + VERSION, text)
+
+    # Replace SVF user suffixes (lowercase): svf_dca2_610 -> svf_dca2_<VERSION>
+    text = re.sub(r'\b(svf_[a-z0-9]+_)\d{3}\b', r'\g<1>' + VERSION, text)
+
+    # Replace RDF user suffixes (lowercase): rdf_na_610 -> rdf_na_<VERSION>
+    text = re.sub(r'\b(rdf_na_)\d{3}\b', r'\g<1>' + VERSION, text)
+
+    # Replace ADAS user suffixes: ADAS_XX_314 -> ADAS_XX_<VERSION>
+    text = re.sub(r'\b(ADAS_[A-Z_]+_)\d{3}\b', r'\g<1>' + VERSION, text)
+
+    # Replace delivery path labels like 2025R4_RDF_North_America_251H0 -> <DELIVERY>
+    text = re.sub(r'\b\d{4}R[1-4]_RDF_[A-Za-z_]+_\d{3}H\d\b', DELIVERY, text)
+
+    # Replace full RDF_HOME paths
+    text = re.sub(
+        r'/PROJ/db4/db/RDF/[A-Z]+/[A-Za-z0-9_]+/' + r'[A-Za-z0-9_]+/\d{3}',
+        RDF_HOME,
+        text
+    )
+
+    # Replace set RDF_HOME=... line specifically
+    text = re.sub(
+        r'(set\s+RDF_HOME\s*=\s*).*',
+        r'\g<1>' + BASE + '/' + DELIVERY + '/',
+        text
+    )
+
+    return text
+
+
+# ============================================================
+# FILE WRITER
+# ============================================================
 
 def write_file(filepath, content, executable=False):
-    dirpath = os.path.dirname(filepath)
-    if dirpath and not os.path.exists(dirpath):
-        os.makedirs(dirpath, exist_ok=True)
+    parent = os.path.dirname(filepath)
+    if parent and not os.path.exists(parent):
+        os.makedirs(parent, exist_ok=True)
+    # Apply all substitutions
+    content = apply_subs(content)
     with open(filepath, 'w', newline='\n') as f:
         f.write(content)
     if executable:
@@ -50,11 +161,14 @@ def write_file(filepath, content, executable=False):
         os.chmod(filepath, st.st_mode | stat.S_IEXEC | stat.S_IXGRP | stat.S_IXOTH)
     print(f"  Created: {filepath}")
 
+
 # ============================================================
-# SCRIPTS DIRECTORY FILES
+# FILE DEFINITIONS
 # ============================================================
 
 scripts_files = {}
+
+# ---- Scripts/ ----
 
 scripts_files["Scripts/SVF_PATCH.csh"] = {"executable": True, "content": r"""#!/bin/csh
  
@@ -106,9 +220,9 @@ scripts_files["Scripts/RDF_NA_611.XML"] = {"executable": False, "content": r"""<
     <Property Name="timing" Value="on"/>
     <Property Name="ParallelFactor" Value="4"/>
     <Property Name="LoaderFilePath" Value="LOADER_FILES"/>
-    <Property Name="DBUser" Value="RDF_NA_610"/>
+    <Property Name="DBUser" Value="RDF_NA_611"/>
     <Property Name="DBPassword" Value="nt#r2g2nsB"/>
-    <Property Name="JDBCURL" Value="jdbc:oracle:thin:RDF_NA_610/atadmin@//iadb101v.ia.ro.int.automotive-wan.com:1521/sgdf_1_P_PDB.ia.ro.int.automotive-wan.com" />
+    <Property Name="JDBCURL" Value="jdbc:oracle:thin:RDF_NA_611/atadmin@//iadb101v.ia.ro.int.automotive-wan.com:1521/sgdf_1_P_PDB.ia.ro.int.automotive-wan.com" />
     <Property Name="SID" Value="lizard1"/>
     <SQLConnection Name="default" User="${DBUser}" Password="${DBPassword}" Instance="${SID}" Url="${JDBCURL}" />
     <Transport Name="default" type="JDBCTransportType" Code="JDBC" Default="true">
@@ -126,7 +240,7 @@ scripts_files["Scripts/RDF_NA_611.XML"] = {"executable": False, "content": r"""<
         </layout>
     </appender>
     <appender name="LogFile" class="org.apache.log4j.FileAppender">
-        <param name="File" value="RDF_NA_610.LOG"/>
+        <param name="File" value="RDF_NA_611.LOG"/>
         <param name="Append" value="true"/>
         <layout class="org.apache.log4j.PatternLayout">
             <param name="ConversionPattern" value="%d %-5p - %m%n"/>
@@ -594,13 +708,6 @@ __END__
 """}
 
 scripts_files["Scripts/extract_2_load.pl"] = {"executable": True, "content": r"""#!/usr/bin/perl -w
-####################################################################################################
-#  Script     : extract_2_load.pl
-#  Author     : Andrei Carp
-#  Date       : 07/19/2015
-#  Last Edited: 08/20/2015, uidn3623
-#  Description: extract recursively tar and gz archives
-####################################################################################################
 use strict;
 use Cwd;
 use File::Copy;
@@ -750,13 +857,9 @@ error:
 	exit 1
 """}
 
-# ============================================================
-# Tests/RDF DIRECTORY FILES
-# ============================================================
+# ---- Tests/RDF/ ----
 
 scripts_files["Tests/RDF/AbakusRDF.csh"] = {"executable": True, "content": r"""#!/bin/csh
-
-#abakus.csh 310 R1 N 311 R0 Y eu2013q1 results
 
 echo ---------------------------------------------------------------------------
 echo `date`: Abakus RDF Start
@@ -829,13 +932,9 @@ echo `date`: Abakus RDF End
 echo ---------------------------------------------------------------------------
 """}
 
-# ============================================================
-# Tests/SVF DIRECTORY FILES
-# ============================================================
+# ---- Tests/SVF/ ----
 
 scripts_files["Tests/SVF/AbakusSVF.csh"] = {"executable": True, "content": r"""#!/bin/csh
-
-#abakus.csh 511 S0 N 540 S0 Y eu2015q4 results
 
 echo ---------------------------------------------------------------------------
 echo `date`: Abakus SVF Start
@@ -920,54 +1019,51 @@ echo `date`: Abakus SVF End
 echo ---------------------------------------------------------------------------
 """}
 
-# ============================================================
-# Tests/SIZE DIRECTORY FILES
-# ============================================================
+# ---- Tests/SIZE/ ----
 
 scripts_files["Tests/SIZE/drop_users.sql"] = {"executable": False, "content": r"""set echo on;
 set timing on;
 set def on;
 
-drop user ADAS_BA_314 CASCADE;
-drop user ADAS_BG_314 CASCADE;
-drop user ADAS_ACH_314 CASCADE;
-drop user ADAS_BLR_314 CASCADE;
-drop user ADAS_EU_312 CASCADE;
-drop user ADAS_AL_314 CASCADE;
-drop user ADAS_SP_314 CASCADE;
-drop user ADAS_BNL_314 CASCADE;
-drop user ADAS_CS_314 CASCADE;
-drop user ADAS_CZ_314 CASCADE;
-drop user ADAS_ELL_314 CASCADE;
-drop user ADAS_FALL_314 CASCADE;
-drop user ADAS_GALL_314 CASCADE;
-drop user ADAS_GR_314 CASCADE;
-drop user ADAS_HR_314 CASCADE;
-drop user ADAS_HU_314 CASCADE;
-drop user ADAS_I_314 CASCADE;
-drop user ADAS_MD_314 CASCADE;
-drop user ADAS_MK_314 CASCADE;
-drop user ADAS_PL_314 CASCADE;
-drop user ADAS_RO_314 CASCADE;
-drop user ADAS_SC_314 CASCADE;
-drop user ADAS_SI_314 CASCADE;
-drop user ADAS_SK_314 CASCADE;
-drop user ADAS_UK_314 CASCADE;
-drop user ADAS_UKR_314 CASCADE;
-drop user ADAS_KOS_314 CASCADE;
-drop user ADAS_RU_314 CASCADE;
-drop user ADAS_TR_314 CASCADE;
-drop user ADAS_ISL_314 CASCADE;
-drop user ADAS_KAZ_314 CASCADE;
-drop user ADAS_MLT_314 CASCADE;
-drop user ADAS_CALL_314 CASCADE;
-drop user ADAS_CUN_314 CASCADE;
-drop user ADAS_NCY_314 CASCADE;
-drop user ADAS_EU_314 CASCADE;
-drop user SVF_DCA1_310 CASCADE;
-drop user SVF_DCA13_310 CASCADE;
-drop user SVF_DCA8_310 CASCADE;
-drop user ADAS_MEX_310 CASCADE;
+drop user ADAS_BA_611 CASCADE;
+drop user ADAS_BG_611 CASCADE;
+drop user ADAS_ACH_611 CASCADE;
+drop user ADAS_BLR_611 CASCADE;
+drop user ADAS_EU_611 CASCADE;
+drop user ADAS_AL_611 CASCADE;
+drop user ADAS_SP_611 CASCADE;
+drop user ADAS_BNL_611 CASCADE;
+drop user ADAS_CS_611 CASCADE;
+drop user ADAS_CZ_611 CASCADE;
+drop user ADAS_ELL_611 CASCADE;
+drop user ADAS_FALL_611 CASCADE;
+drop user ADAS_GALL_611 CASCADE;
+drop user ADAS_GR_611 CASCADE;
+drop user ADAS_HR_611 CASCADE;
+drop user ADAS_HU_611 CASCADE;
+drop user ADAS_I_611 CASCADE;
+drop user ADAS_MD_611 CASCADE;
+drop user ADAS_MK_611 CASCADE;
+drop user ADAS_PL_611 CASCADE;
+drop user ADAS_RO_611 CASCADE;
+drop user ADAS_SC_611 CASCADE;
+drop user ADAS_SI_611 CASCADE;
+drop user ADAS_SK_611 CASCADE;
+drop user ADAS_UK_611 CASCADE;
+drop user ADAS_UKR_611 CASCADE;
+drop user ADAS_KOS_611 CASCADE;
+drop user ADAS_RU_611 CASCADE;
+drop user ADAS_TR_611 CASCADE;
+drop user ADAS_ISL_611 CASCADE;
+drop user ADAS_KAZ_611 CASCADE;
+drop user ADAS_MLT_611 CASCADE;
+drop user ADAS_CALL_611 CASCADE;
+drop user ADAS_CUN_611 CASCADE;
+drop user ADAS_NCY_611 CASCADE;
+drop user SVF_DCA1_611 CASCADE;
+drop user SVF_DCA13_611 CASCADE;
+drop user SVF_DCA8_611 CASCADE;
+drop user ADAS_MEX_611 CASCADE;
 
 set echo off;
 exit; 
@@ -1001,9 +1097,7 @@ spool off
 exit;
 """}
 
-# ============================================================
-# Tests/UT DIRECTORY FILES
-# ============================================================
+# ---- Tests/UT/ ----
 
 scripts_files["Tests/UT/python_wrapper"] = {"executable": True, "content": r"""#!/bin/csh
 
@@ -1035,8 +1129,8 @@ echo LD_LIBRARY_PATH has been set to $LD_LIBRARY_PATH
 
 scripts_files["Tests/UT/runUT"] = {"executable": True, "content": r"""#!/bin/sh
 
-# 610
-RDF_COMPILER=/PROJ/db4/db/RDF/NA/2026Q1/2025R4_RDF_North_America_251H0/610/Scripts/compiler
+# 611
+RDF_COMPILER=/PROJ/db4/db/RDF/NA/2026Q1_SeSp/2025R4_RDF_North_America_251H0/611/Scripts/compiler
 
 # !!! ut.py should be encoded as Unix not DOS !!!
 dos2unix $RDF_COMPILER/gdfConvert/util/ut/ut.py
@@ -1058,23 +1152,45 @@ export LD_LIBRARY_PATH
 COMMON_ARGS="--test_password nt\#r2g2nsB --test_service lizard1 --trun_context PRODUCTION --root_path $RDF_COMPILER/gdfConvert/util/ut/test_case_root --maxThreads 20 --loc 3 --report_with_variables_list --report_format excel_csv --timeout 2000 --property_user navdb_ro --property_dsn (DESCRIPTION=(ADDRESS_LIST=(ADDRESS=(PROTOCOL=TCP)(HOST=euxb009s.eux.de.int.automotive-wan.com)(PORT=1521)(SEND_BUF_SIZE=)(RECV_BUF_SIZE=))(LOAD_BALANCE=yes))(CONNECT_DATA=(SERVICE_NAME=stemppo_1_p_pdb.eux.de.int.automotive-wan.com))) --property_password navdb#r2g2nsb --report_columns Case+No.,ID,Expr.+No.,UT_Name,Filename,Line+No.,Backend,Work+Package,Tags,Requirements,Conducted,Passed,Timed+out,Elapsed+[s],Excep.,Var.+uninitialized,Var.+defaulted,Filtered+by+Variable,Cond.+Match,LOC,Severity+(0CBAS),Log+Text,Statement+-+unparsed,Statement+-+PARSED,Orig.+Expr.,Parsed+Expr.,Result+(max.+10+rows),Exception+Text,Type,Qualifier,Orig.+Cond.,Parsed+Cond.,Starttime,Endtime,Dbname+Match,Prod.+Match,Suppl.+Match,U+Match,LOC+Match,ID+Match,Filename+Match"
 
 ### RDF NA
-python_wrapper $RDF_COMPILER/gdfConvert/util/ut/ut.py --test_user rdf_na_610 --spec_id 1804 --user_types "rdf" --trun_label "SVF_KW22_13: rdf_na_$USER_SFX" --report_file_name "rdf_na_$USER_SFX.csv" --log_file_name "rdf_na_$USER_SFX.log" $COMMON_ARGS
+python_wrapper $RDF_COMPILER/gdfConvert/util/ut/ut.py --test_user rdf_na_611 --spec_id 1804 --user_types "rdf" --trun_label "SVF_KW22_13: rdf_na_$USER_SFX" --report_file_name "rdf_na_$USER_SFX.csv" --log_file_name "rdf_na_$USER_SFX.log" $COMMON_ARGS
 
 ### SVF users
 for region in dca2 dca3 dca4 dca5 dca6 dca7 dca8 dca9 dca10 dca11 dca12 dca13 dca14 dca1 dca15 mex; do
-python_wrapper $RDF_COMPILER/gdfConvert/util/ut/ut.py --test_user svf_${region}_610 --spec_id 1804 --user_types "svf,rdf+svf" --trun_label "SVF_KW22_13: svf_${region}_$USER_SFX" --report_file_name "svf_${region}_$USER_SFX.csv" --log_file_name "svf_${region}_$USER_SFX.log" $COMMON_ARGS
+python_wrapper $RDF_COMPILER/gdfConvert/util/ut/ut.py --test_user svf_${region}_611 --spec_id 1804 --user_types "svf,rdf+svf" --trun_label "SVF_KW22_13: svf_${region}_$USER_SFX" --report_file_name "svf_${region}_$USER_SFX.csv" --log_file_name "svf_${region}_$USER_SFX.log" $COMMON_ARGS
 done
 """}
+
 
 # ============================================================
 # MAIN
 # ============================================================
 
 def main():
+    print("========================================")
+    print("Generating files with substitutions...")
+    print(f"  VERSION:  {VERSION}")
+    print(f"  DELIVERY: {DELIVERY}")
+    print(f"  BASE:     {BASE}")
+    print("========================================")
+    print("")
+
     for filepath, meta in scripts_files.items():
         write_file(filepath, meta["content"], meta.get("executable", False))
-    print("\n===== All files generated successfully =====")
-    print("Generated in: " + os.getcwd())
+
+    # Also rename the XML and CFG files to use VERSION in the filename
+    version_renames = {
+        "Scripts/RDF_NA_611.XML": f"Scripts/RDF_NA_{VERSION}.XML",
+        "Scripts/R2S_NA_611.CFG": f"Scripts/R2S_NA_{VERSION}.CFG",
+        "Scripts/LOAD_NA_611.CSH": f"Scripts/LOAD_NA_{VERSION}.CSH",
+    }
+    for old_name, new_name in version_renames.items():
+        if old_name != new_name and os.path.exists(old_name):
+            os.rename(old_name, new_name)
+            print(f"  Renamed: {old_name} -> {new_name}")
+
+    print("")
+    print("===== All files generated successfully =====")
+    print(f"Generated in: {os.getcwd()}")
 
 if __name__ == "__main__":
     main()
@@ -1083,11 +1199,11 @@ PYEOF
 # Step 3: Copy generate_files.py to remote server root VERSION directory
 scp -o StrictHostKeyChecking=no "$TMPFILE" ${REMOTE_USER}@${REMOTE_HOST}:${REMOTE_BASE}/generate_files.py
 
-# Step 4: Run it remotely from the VERSION root directory
+# Step 4: Run it remotely, passing VERSION, DELIVERY and BASE as arguments
 ssh -o StrictHostKeyChecking=no ${REMOTE_USER}@${REMOTE_HOST} "
 export TERM=xterm
 cd ${REMOTE_BASE} || exit 1
-python3 generate_files.py
+python3 generate_files.py '${VERSION}' '${DELIVERY}' '${BASE}'
 
 echo ''
 echo '========================================='
