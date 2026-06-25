@@ -1219,13 +1219,19 @@ python3 generate_files.py '${VERSION}' '${DELIVERY}' '${BASE}' '${OSUFIX}'
 
 echo ''
 echo '========================================='
+echo 'Cleaning up generate_files.py...'
+echo '========================================='
+rm -f generate_files.py
+echo 'generate_files.py removed.'
+
+echo ''
+echo '========================================='
 echo 'FILE LAYOUT:'
 echo '========================================='
 find . -type f | sort
 echo '========================================='
 echo 'DONE'
 "
-
 # Cleanup
 rm -f "$TMPFILE"
 
