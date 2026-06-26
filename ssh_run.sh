@@ -30,8 +30,11 @@ echo "========================================="
 echo "  Directory : $REMOTE_DIR"
 echo "  Script    : $CSH_FILE"
 echo "  Log file  : $LOG_FILE"
-echo "  Screen    : $SCREEN_NAME (detached)"
+echo "  Screen    : $SCREEN_NAME"
 echo "========================================="
+echo ""
+echo "  You will see the live output."
+echo "  To detach and keep it running: Ctrl+A then D"
 echo ""
 
 read -r -p "Proceed? (y/n): " CONFIRM
@@ -40,13 +43,10 @@ if [[ "$CONFIRM" != "y" && "$CONFIRM" != "Y" ]]; then
   exit 0
 fi
 
-echo "Starting job in a detached screen session on the remote server..."
-ssh -o StrictHostKeyChecking=no "$USER_HOST" "\
+echo "Connecting to server and starting job in screen..."
+ssh -tt -o StrictHostKeyChecking=no "$USER_HOST" "\
   export TERM=xterm; \
   source ~/.bash_profile 2>/dev/null || source ~/.profile 2>/dev/null || true; \
   cd \"$REMOTE_DIR\" && \
-  screen -dmS \"$SCREEN_NAME\" bash -lc '( tcsh \"./$CSH_FILE\" ) 2>&1 | tee \"$LOG_FILE\"' \
+  screen -S \"$SCREEN_NAME\" tcsh -c './$CSH_FILE |& tee $LOG_FILE' \
 "
-
-echo "Launched. The job will continue running on the server even if you disconnect."
-echo "Log: $REMOTE_DIR/$LOG_FILE"
