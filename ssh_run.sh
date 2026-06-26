@@ -22,11 +22,15 @@ if [[ -z "$LOG_FILE" ]]; then
   exit 1
 fi
 
+# Simple unique screen session name
+SCREEN_NAME="run_$(date +%Y%m%d_%H%M%S)"
+
 echo ""
 echo "========================================="
 echo "  Directory : $REMOTE_DIR"
 echo "  Script    : $CSH_FILE"
 echo "  Log file  : $LOG_FILE"
+echo "  Screen    : $SCREEN_NAME (detached)"
 echo "========================================="
 echo ""
 
@@ -36,10 +40,13 @@ if [[ "$CONFIRM" != "y" && "$CONFIRM" != "Y" ]]; then
   exit 0
 fi
 
-echo "Connecting to server..."
-ssh -tt -o StrictHostKeyChecking=no "$USER_HOST" "\
-export TERM=xterm && \
-source ~/.bash_profile 2>/dev/null || source ~/.profile 2>/dev/null || true && \
-cd \"$REMOTE_DIR\" && \
-tcsh -c './$CSH_FILE |& tee $LOG_FILE'
+echo "Starting job in a detached screen session on the remote server..."
+ssh -o StrictHostKeyChecking=no "$USER_HOST" "\
+  export TERM=xterm; \
+  source ~/.bash_profile 2>/dev/null || source ~/.profile 2>/dev/null || true; \
+  cd \"$REMOTE_DIR\" && \
+  screen -dmS \"$SCREEN_NAME\" bash -lc '( tcsh \"./$CSH_FILE\" ) 2>&1 | tee \"$LOG_FILE\"' \
 "
+
+echo "Launched. The job will continue running on the server even if you disconnect."
+echo "Log: $REMOTE_DIR/$LOG_FILE"
