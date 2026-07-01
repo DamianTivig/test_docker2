@@ -11,15 +11,6 @@ read -r -p "Enter OLD VERSION (OSUFIX, e.g., 510): " OSUFIX
 read -r -p "Enter LOCAL destination path (e.g., ./local_env): " LOCAL_DEST
 LOCAL_DEST="${LOCAL_DEST:-./local_env}"
 
-# Docker settings
-DEFAULT_IMAGE="rockylinux-tcsh:8"
-DEFAULT_CONTAINER="rdf-generator"
-read -r -p "Docker image name (default: ${DEFAULT_IMAGE}): " IMAGE_NAME
-IMAGE_NAME="${IMAGE_NAME:-${DEFAULT_IMAGE}}"
-read -r -p "Container name (default: ${DEFAULT_CONTAINER}): " CONTAINER_NAME
-CONTAINER_NAME="${CONTAINER_NAME:-${DEFAULT_CONTAINER}}"
-
-CONTAINER_WORKDIR="/workspace"
 RDF_HOME="${BASE}/${DELIVERY}/${VERSION}"
 
 echo ""
@@ -30,8 +21,6 @@ echo "  VERSION:       ${VERSION}"
 echo "  OSUFIX:        ${OSUFIX}"
 echo "  RDF_HOME:      ${RDF_HOME}"
 echo "  LOCAL DEST:    ${LOCAL_DEST}"
-echo "  Image:         ${IMAGE_NAME}"
-echo "  Container:     ${CONTAINER_NAME}"
 echo "========================================="
 echo ""
 
@@ -46,7 +35,7 @@ fi
 # =============================================
 echo ""
 echo "========================================="
-echo "Step 1: Creating local directory structure..."
+echo "Step 1: Creating directory structure..."
 echo "========================================="
 
 mkdir -p "${LOCAL_DEST}/${VERSION}/Scripts/compiler/gdfConvert/svf/RDF2SVF"
@@ -67,14 +56,15 @@ mkdir -p "${LOCAL_DEST}/${VERSION}/patches/DUPLICATE_DCA2/log"
 echo "Directory structure created."
 
 # =============================================
-# STEP 2: Generate the Python script locally
+# STEP 2: Write generate_files.py
 # =============================================
 echo ""
 echo "========================================="
 echo "Step 2: Writing generate_files.py..."
 echo "========================================="
 
-GEN_SCRIPT="${LOCAL_DEST}/${VERSION}/generate_files.py"
+GEN_DIR="${LOCAL_DEST}/${VERSION}"
+GEN_SCRIPT="${GEN_DIR}/generate_files.py"
 
 cat > "${GEN_SCRIPT}" << 'PYEOF'
 #!/usr/bin/env python3
@@ -1173,76 +1163,47 @@ PYEOF
 echo "  Written: ${GEN_SCRIPT}"
 
 # =============================================
-# STEP 3: Check Docker image, build if missing
+# STEP 3: Check for python3 and run the generator
 # =============================================
 echo ""
 echo "========================================="
-echo "Step 3: Checking Docker image..."
+echo "Step 3: Running file generation..."
 echo "========================================="
 
-if ! docker image inspect "${IMAGE_NAME}" >/dev/null 2>&1; then
-  echo "Image '${IMAGE_NAME}' not found. Building..."
-  docker build -t "${IMAGE_NAME}" .
-else
-  echo "Image '${IMAGE_NAME}' found."
+# Check python3 is available in this container
+if ! command -v python3 >/dev/null 2>&1; then
+  echo "ERROR: python3 not found in this environment."
+  echo "Install it with: dnf install -y python39"
+  exit 1
 fi
 
-# =============================================
-# STEP 4: Remove stale container if present
-# =============================================
-if docker ps -a --format '{{.Names}}' | grep -q "^${CONTAINER_NAME}$"; then
-  echo "Removing old container '${CONTAINER_NAME}'..."
-  docker rm -f "${CONTAINER_NAME}" >/dev/null 2>&1
-fi
+echo "  Python: $(python3 --version)"
+echo "  Running in: $(hostname)"
+echo "  OS: $(cat /etc/redhat-release 2>/dev/null || echo 'unknown')"
+echo "  User: $(whoami)"
+echo ""
+
+# cd into the VERSION directory and run the generator
+(
+  cd "${GEN_DIR}"
+  python3 generate_files.py "${VERSION}" "${DELIVERY}" "${BASE}" "${OSUFIX}"
+)
+
+# Clean up the generator script
+rm -f "${GEN_SCRIPT}"
+echo "  Cleaned up generate_files.py"
 
 # =============================================
-# STEP 5: Run generate_files.py inside container
+# STEP 4: Show what was generated
 # =============================================
 echo ""
 echo "========================================="
-echo "Step 4: Running file generation inside container..."
+echo "Step 4: Generated file layout"
 echo "========================================="
+echo ""
 
-# Resolve LOCAL_DEST to absolute path for the bind mount
 ABS_LOCAL_DEST="$(cd "${LOCAL_DEST}" && pwd)"
 
-docker run \
-  --name "${CONTAINER_NAME}" \
-  --rm \
-  -v "${ABS_LOCAL_DEST}:${CONTAINER_WORKDIR}" \
-  -w "${CONTAINER_WORKDIR}/${VERSION}" \
-  "${IMAGE_NAME}" \
-  /bin/bash -c "
-    set -e
-
-    echo '--- Inside container ---'
-    echo \"Hostname: \$(hostname)\"
-    echo \"OS: \$(cat /etc/redhat-release 2>/dev/null || echo 'unknown')\"
-    echo \"User: \$(whoami)\"
-    echo \"Working dir: \$(pwd)\"
-    echo ''
-
-    if [ ! -f generate_files.py ]; then
-      echo 'ERROR: generate_files.py not found at \$(pwd)'
-      ls -la
-      exit 1
-    fi
-
-    python3 generate_files.py '${VERSION}' '${DELIVERY}' '${BASE}' '${OSUFIX}'
-
-    rm -f generate_files.py
-    echo ''
-    echo 'Cleaned up generate_files.py from workspace.'
-  "
-
-# =============================================
-# STEP 6: Show what was generated
-# =============================================
-echo ""
-echo "========================================="
-echo "Step 5: Generated file layout"
-echo "========================================="
-echo ""
 echo "--- ${VERSION} directory ---"
 find "${LOCAL_DEST}/${VERSION}" -type f | sort
 echo ""
@@ -1253,10 +1214,8 @@ echo "========================================="
 echo "DONE"
 echo "========================================="
 echo ""
-echo "All files generated locally at: ${ABS_LOCAL_DEST}"
+echo "All files generated at: ${ABS_LOCAL_DEST}"
 echo "  Scripts/Tests/patches: ${ABS_LOCAL_DEST}/${VERSION}/"
 echo "  load directory:        ${ABS_LOCAL_DEST}/load/"
 echo ""
 echo "Internal script paths reference: ${RDF_HOME}"
-echo "Mount this local tree into your runner container at that path,"
-echo "or adjust paths inside the generated configs as needed."
