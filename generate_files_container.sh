@@ -2,7 +2,21 @@
 set -euo pipefail
 
 # =============================================
-# USER INPUT
+# REMOTE SERVER (where SSH keys exist)
+# =============================================
+DEFAULT_REMOTE_USER="uie74356"
+DEFAULT_REMOTE_HOST="10.198.127.171"
+
+read -r -p "Remote user (default: ${DEFAULT_REMOTE_USER}): " REMOTE_USER
+REMOTE_USER="${REMOTE_USER:-${DEFAULT_REMOTE_USER}}"
+
+read -r -p "Remote host (default: ${DEFAULT_REMOTE_HOST}): " REMOTE_HOST
+REMOTE_HOST="${REMOTE_HOST:-${DEFAULT_REMOTE_HOST}}"
+
+USER_HOST="${REMOTE_USER}@${REMOTE_HOST}"
+
+# =============================================
+# PROJECT INPUT
 # =============================================
 read -r -p "Enter BASE path (used inside scripts): " BASE
 read -r -p "Enter DELIVERY name: " DELIVERY
@@ -15,12 +29,13 @@ RDF_HOME="${BASE}/${DELIVERY}/${VERSION}"
 
 echo ""
 echo "========================================="
-echo "  BASE:          ${BASE}"
-echo "  DELIVERY:      ${DELIVERY}"
-echo "  VERSION:       ${VERSION}"
-echo "  OSUFIX:        ${OSUFIX}"
-echo "  RDF_HOME:      ${RDF_HOME}"
-echo "  LOCAL DEST:    ${LOCAL_DEST}"
+echo "  Remote server  : ${USER_HOST}"
+echo "  BASE:          : ${BASE}"
+echo "  DELIVERY       : ${DELIVERY}"
+echo "  VERSION        : ${VERSION}"
+echo "  OSUFIX         : ${OSUFIX}"
+echo "  RDF_HOME       : ${RDF_HOME}"
+echo "  LOCAL DEST     : ${LOCAL_DEST}"
 echo "========================================="
 echo ""
 
@@ -31,11 +46,57 @@ if [[ "$CONFIRM" != "y" && "$CONFIRM" != "Y" ]]; then
 fi
 
 # =============================================
-# STEP 1: Create local directory structure
+# STEP 1: Copy SSH keys from remote server
 # =============================================
 echo ""
 echo "========================================="
-echo "Step 1: Creating directory structure..."
+echo "Step 1: Setting up SSH keys..."
+echo "========================================="
+
+mkdir -p ~/.ssh
+chmod 700 ~/.ssh
+
+# Copy SSH keys from remote server
+echo "Copying SSH keys from ${USER_HOST}..."
+scp -o StrictHostKeyChecking=no "${USER_HOST}:~/.ssh/id_rsa" ~/.ssh/id_rsa
+scp -o StrictHostKeyChecking=no "${USER_HOST}:~/.ssh/id_rsa.pub" ~/.ssh/id_rsa.pub
+
+# Set correct permissions
+chmod 600 ~/.ssh/id_rsa
+chmod 644 ~/.ssh/id_rsa.pub
+
+# Copy known_hosts if it exists on remote
+scp -o StrictHostKeyChecking=no "${USER_HOST}:~/.ssh/known_hosts" ~/.ssh/known_hosts 2>/dev/null || true
+
+# Add the Git server to known_hosts
+echo "Adding Git server to known_hosts..."
+ssh-keyscan -p 29418 buic-scm-ias.automotive-wan.com >> ~/.ssh/known_hosts 2>/dev/null || true
+
+# Copy SSH config if it exists
+scp -o StrictHostKeyChecking=no "${USER_HOST}:~/.ssh/config" ~/.ssh/config 2>/dev/null || true
+chmod 600 ~/.ssh/config 2>/dev/null || true
+
+# Verify the key works
+echo ""
+echo "Verifying SSH key..."
+if ssh -o StrictHostKeyChecking=no -o ConnectTimeout=10 -p 29418 "${REMOTE_USER}@buic-scm-ias.automotive-wan.com" 2>&1 | grep -qi "welcome\|success\|authenticated"; then
+  echo "  SSH key verified — connection to Git server works."
+else
+  echo "  WARNING: Could not verify SSH key against Git server."
+  echo "  The clone step may fail. Continuing anyway..."
+fi
+
+echo ""
+echo "SSH keys set up:"
+ls -la ~/.ssh/
+echo ""
+
+# =============================================
+# STEP 2: Create directory structure
+# =============================================
+echo ""
+echo "========================================="
+echo "Step 2: Creating directory structure..."
 echo "========================================="
 
 mkdir -p "${LOCAL_DEST}/${VERSION}/Scripts/compiler/gdfConvert/svf/RDF2SVF"
@@ -56,11 +117,11 @@ mkdir -p "${LOCAL_DEST}/${VERSION}/patches/DUPLICATE_DCA2/log"
 echo "Directory structure created."
 
 # =============================================
-# STEP 2: Write generate_files.py
+# STEP 3: Write generate_files.py
 # =============================================
 echo ""
 echo "========================================="
-echo "Step 2: Writing generate_files.py..."
+echo "Step 3: Writing generate_files.py..."
 echo "========================================="
 
 GEN_DIR="${LOCAL_DEST}/${VERSION}"
@@ -1163,42 +1224,39 @@ PYEOF
 echo "  Written: ${GEN_SCRIPT}"
 
 # =============================================
-# STEP 3: Check for python3 and run the generator
+# STEP 4: Check for python3 and run generator
 # =============================================
 echo ""
 echo "========================================="
-echo "Step 3: Running file generation..."
+echo "Step 4: Running file generation..."
 echo "========================================="
 
-# Check python3 is available in this container
 if ! command -v python3 >/dev/null 2>&1; then
-  echo "ERROR: python3 not found in this environment."
+  echo "ERROR: python3 not found."
   echo "Install it with: dnf install -y python39"
   exit 1
 fi
 
 echo "  Python: $(python3 --version)"
-echo "  Running in: $(hostname)"
+echo "  Hostname: $(hostname)"
 echo "  OS: $(cat /etc/redhat-release 2>/dev/null || echo 'unknown')"
 echo "  User: $(whoami)"
 echo ""
 
-# cd into the VERSION directory and run the generator
 (
   cd "${GEN_DIR}"
   python3 generate_files.py "${VERSION}" "${DELIVERY}" "${BASE}" "${OSUFIX}"
 )
 
-# Clean up the generator script
 rm -f "${GEN_SCRIPT}"
 echo "  Cleaned up generate_files.py"
 
 # =============================================
-# STEP 4: Show what was generated
+# STEP 5: Show results
 # =============================================
 echo ""
 echo "========================================="
-echo "Step 4: Generated file layout"
+echo "Step 5: Generated file layout"
 echo "========================================="
 echo ""
 
@@ -1208,7 +1266,7 @@ echo "--- ${VERSION} directory ---"
 find "${LOCAL_DEST}/${VERSION}" -type f | sort
 echo ""
 echo "--- load directory ---"
-find "${LOCAL_DEST}/load" -type f -o -type d 2>/dev/null | sort || echo "  (empty — populate before running the main script)"
+find "${LOCAL_DEST}/load" -type f -o -type d 2>/dev/null | sort || echo "  (empty)"
 echo ""
 echo "========================================="
 echo "DONE"
@@ -1217,5 +1275,8 @@ echo ""
 echo "All files generated at: ${ABS_LOCAL_DEST}"
 echo "  Scripts/Tests/patches: ${ABS_LOCAL_DEST}/${VERSION}/"
 echo "  load directory:        ${ABS_LOCAL_DEST}/load/"
+echo ""
+echo "SSH keys are set up at: ~/.ssh/"
+echo "Git clone should now work when you run the CSH scripts."
 echo ""
 echo "Internal script paths reference: ${RDF_HOME}"
