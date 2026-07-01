@@ -20,15 +20,29 @@ echo "FULL PATH:  ${LOCAL_BASE}"
 echo "========================================="
 echo "Creating directory structure locally..."
 
-# Step 1: Create directory structure locally
+# Step 1: Create directory structure locally (including dependencies)
 mkdir -p "${LOCAL_BASE}/Scripts"
+mkdir -p "${LOCAL_BASE}/Scripts/compiler/gdfConvert/svf/RDF2SVF"
+mkdir -p "${LOCAL_BASE}/Scripts/compiler/gdfConvert/scripts"
+mkdir -p "${LOCAL_BASE}/Scripts/compiler/gdfConvert/svf/data_model"
+mkdir -p "${LOCAL_BASE}/Scripts/compiler/gdfConvert/util/ut"
 mkdir -p "${LOCAL_BASE}/Tests/RDF"
 mkdir -p "${LOCAL_BASE}/Tests/SIZE"
 mkdir -p "${LOCAL_BASE}/Tests/SVF"
 mkdir -p "${LOCAL_BASE}/Tests/UT"
 mkdir -p "${LOCAL_BASE2}/load/allfiles"
-mkdir -p "${LOCAL_BASE2}/load/rdfdeploy"
+mkdir -p "${LOCAL_BASE2}/load/rdfdeploy/RDF/BIN/etc/xml"
+mkdir -p "${LOCAL_BASE2}/load/rdfdeploy/RDF/LOADER_FILES/CORE"
+mkdir -p "${LOCAL_BASE2}/load/rdfdeploy/RDF/LOADER_FILES/ADAS"
 mkdir -p "${LOCAL_BASE}/patches"
+mkdir -p "${LOCAL_BASE}/patches/DUPLICATE_DCA2"
+mkdir -p "${LOCAL_BASE}/patches/DUPLICATE_DCA2/log"
+
+# Additional dependency directories
+mkdir -p "${BASE}/DOWNLOAD_Archive/NAVTEQ/Americas/North_America"
+mkdir -p "/db/tools/Abakus2/bin"
+mkdir -p "${LOCAL_BASE}/Scripts/log"
+
 echo "Directory structure created."
 
 # Step 2: Create generate_files.py in the VERSION directory
@@ -130,9 +144,9 @@ def apply_subs(text):
     # Replace delivery path labels like 2025R4_RDF_North_America_251H0 -> <DELIVERY>
     text = re.sub(r'\b\d{4}R[1-4]_RDF_[A-Za-z_]+_\d{3}H\d\b', DELIVERY, text)
 
-    # Replace full RDF_HOME paths
+    # Replace full RDF_HOME paths - make more flexible
     text = re.sub(
-        r'/PROJ/db4/db/RDF/[A-Z]+/[A-Za-z0-9_]+/' + r'[A-Za-z0-9_]+/\d{3}',
+        r'/PROJ/db4/db/RDF/[A-Z]+/[A-Za-z0-9_]+/[A-Za-z0-9_]+/\d{3}',
         RDF_HOME,
         text
     )
@@ -141,6 +155,19 @@ def apply_subs(text):
     text = re.sub(
         r'(set\s+RDF_HOME\s*=\s*).*',
         r'\g<1>' + BASE + '/' + DELIVERY + '/',
+        text
+    )
+
+    # Replace ARCHIVE paths
+    text = re.sub(
+        r'set\s+ARCHIVE_CORE_DATA\s*=.*',
+        f'set ARCHIVE_CORE_DATA={BASE}/DOWNLOAD_Archive/NAVTEQ/Americas/North_America/{DELIVERY}',
+        text
+    )
+    
+    text = re.sub(
+        r'set\s+ARCHIVE_SLOPE_DATA\s*=.*',
+        f'set ARCHIVE_SLOPE_DATA={BASE}/DOWNLOAD_Archive/NAVTEQ/Americas/North_America/{DELIVERY}_CurveHeightSlope_plugin',
         text
     )
 
@@ -1166,67 +1193,9 @@ python_wrapper $RDF_COMPILER/gdfConvert/util/ut/ut.py --test_user svf_${region}_
 done
 """}
 
+# ---- README ----
+scripts_files["README.md"] = {"executable": False, "content": r"""# RDF/SVF Environment Setup
 
-# ============================================================
-# MAIN
-# ============================================================
+This directory structure was automatically generated.
 
-def main():
-    print("========================================")
-    print("Generating files with substitutions...")
-    print(f"  VERSION:  {VERSION}")
-    print(f"  DELIVERY: {DELIVERY}")
-    print(f"  BASE:     {BASE}")
-    print(f"  OSUFIX:   {OSUFIX}")
-    print("========================================")
-    print("")
-
-    for filepath, meta in scripts_files.items():
-        write_file(filepath, meta["content"], meta.get("executable", False))
-
-    # Rename files that have VERSION in the filename
-    version_renames = {
-        "Scripts/RDF_NA_611.XML": f"Scripts/RDF_NA_{VERSION}.XML",
-        "Scripts/R2S_NA_611.CFG": f"Scripts/R2S_NA_{VERSION}.CFG",
-        "Scripts/LOAD_NA_611.CSH": f"Scripts/LOAD_NA_{VERSION}.CSH",
-    }
-    for old_name, new_name in version_renames.items():
-        if old_name != new_name and os.path.exists(old_name):
-            os.rename(old_name, new_name)
-            print(f"  Renamed: {old_name} -> {new_name}")
-
-    print("")
-    print("===== All files generated successfully =====")
-    print(f"Generated in: {os.getcwd()}")
-
-if __name__ == "__main__":
-    main()
-PYEOF
-
-# Step 3: Run generate_files.py locally from within the VERSION directory
-echo ""
-echo "========================================="
-echo "Running generate_files.py locally..."
-echo "========================================="
-
-cd "${LOCAL_BASE}"
-python3 generate_files.py "${VERSION}" "${DELIVERY}" "${BASE}" "${OSUFIX}"
-
-# Step 4: Clean up generate_files.py
-echo ""
-echo "========================================="
-echo "Cleaning up generate_files.py..."
-echo "========================================="
-rm -f "${LOCAL_BASE}/generate_files.py"
-echo "generate_files.py removed."
-
-# Step 5: Show final file layout
-echo ""
-echo "========================================="
-echo "FILE LAYOUT:"
-echo "========================================="
-find "${LOCAL_BASE}" -type f | sort
-echo "========================================="
-echo "DONE"
-echo ""
-echo "All done! Files generated locally at: ${LOCAL_BASE}"
+## Directory Structure
