@@ -2,16 +2,24 @@
 set -euo pipefail
 
 # =============================================
-# REMOTE SERVER (where SSH keys exist)
+# REMOTE SERVER
 # =============================================
 DEFAULT_REMOTE_USER="uie74356"
 DEFAULT_REMOTE_HOST="10.198.127.171"
+DEFAULT_GIT_HOST="buic-scm-ias.automotive-wan.com"
+DEFAULT_GIT_PORT="29418"
 
 read -r -p "Remote user (default: ${DEFAULT_REMOTE_USER}): " REMOTE_USER
 REMOTE_USER="${REMOTE_USER:-${DEFAULT_REMOTE_USER}}"
 
 read -r -p "Remote host (default: ${DEFAULT_REMOTE_HOST}): " REMOTE_HOST
 REMOTE_HOST="${REMOTE_HOST:-${DEFAULT_REMOTE_HOST}}"
+
+read -r -p "Git server host (default: ${DEFAULT_GIT_HOST}): " GIT_HOST
+GIT_HOST="${GIT_HOST:-${DEFAULT_GIT_HOST}}"
+
+read -r -p "Git server port (default: ${DEFAULT_GIT_PORT}): " GIT_PORT
+GIT_PORT="${GIT_PORT:-${DEFAULT_GIT_PORT}}"
 
 USER_HOST="${REMOTE_USER}@${REMOTE_HOST}"
 
@@ -30,7 +38,8 @@ RDF_HOME="${BASE}/${DELIVERY}/${VERSION}"
 echo ""
 echo "========================================="
 echo "  Remote server  : ${USER_HOST}"
-echo "  BASE:          : ${BASE}"
+echo "  Git server     : ${GIT_HOST}:${GIT_PORT}"
+echo "  BASE           : ${BASE}"
 echo "  DELIVERY       : ${DELIVERY}"
 echo "  VERSION        : ${VERSION}"
 echo "  OSUFIX         : ${OSUFIX}"
@@ -46,7 +55,8 @@ if [[ "$CONFIRM" != "y" && "$CONFIRM" != "Y" ]]; then
 fi
 
 # =============================================
-# STEP 1: Copy SSH keys from remote server
+# STEP 1: Generate SSH keys in container
+#         and copy them to the remote server
 # =============================================
 echo ""
 echo "========================================="
@@ -56,38 +66,128 @@ echo "========================================="
 mkdir -p ~/.ssh
 chmod 700 ~/.ssh
 
-# Copy SSH keys from remote server
-echo "Copying SSH keys from ${USER_HOST}..."
-scp -o StrictHostKeyChecking=no "${USER_HOST}:~/.ssh/id_rsa" ~/.ssh/id_rsa
-scp -o StrictHostKeyChecking=no "${USER_HOST}:~/.ssh/id_rsa.pub" ~/.ssh/id_rsa.pub
+SSH_KEY_FILE=~/.ssh/id_rsa
 
-# Set correct permissions
-chmod 600 ~/.ssh/id_rsa
-chmod 644 ~/.ssh/id_rsa.pub
+if [ -f "${SSH_KEY_FILE}" ]; then
+  echo "  SSH key already exists: ${SSH_KEY_FILE}"
+  read -r -p "  Regenerate? (y/n): " REGEN
+  if [[ "$REGEN" == "y" || "$REGEN" == "Y" ]]; then
+    rm -f "${SSH_KEY_FILE}" "${SSH_KEY_FILE}.pub"
+  else
+    echo "  Keeping existing key."
+  fi
+fi
 
-# Copy known_hosts if it exists on remote
-scp -o StrictHostKeyChecking=no "${USER_HOST}:~/.ssh/known_hosts" ~/.ssh/known_hosts 2>/dev/null || true
+if [ ! -f "${SSH_KEY_FILE}" ]; then
+  echo ""
+  echo "  Generating new SSH key pair inside container..."
+  ssh-keygen -t rsa -b 4096 -C "${REMOTE_USER}@container" -f "${SSH_KEY_FILE}" -N ""
+  echo ""
+  echo "  Key generated: ${SSH_KEY_FILE}"
+fi
 
-# Add the Git server to known_hosts
-echo "Adding Git server to known_hosts..."
-ssh-keyscan -p 29418 buic-scm-ias.automotive-wan.com >> ~/.ssh/known_hosts 2>/dev/null || true
+chmod 600 "${SSH_KEY_FILE}"
+chmod 644 "${SSH_KEY_FILE}.pub"
 
-# Copy SSH config if it exists
-scp -o StrictHostKeyChecking=no "${USER_HOST}:~/.ssh/config" ~/.ssh/config 2>/dev/null || true
-chmod 600 ~/.ssh/config 2>/dev/null || true
-
-# Verify the key works
 echo ""
-echo "Verifying SSH key..."
-if ssh -o StrictHostKeyChecking=no -o ConnectTimeout=10 -p 29418 "${REMOTE_USER}@buic-scm-ias.automotive-wan.com" 2>&1 | grep -qi "welcome\|success\|authenticated"; then
-  echo "  SSH key verified — connection to Git server works."
+echo "  Your public key:"
+echo "  --------------------------------------------------------"
+cat "${SSH_KEY_FILE}.pub"
+echo "  --------------------------------------------------------"
+
+# =============================================
+# STEP 1b: Copy public key to remote server
+# =============================================
+echo ""
+echo "  Copying public key to remote server ${USER_HOST}..."
+echo "  (You will be prompted for your password)"
+echo ""
+
+# Use ssh-copy-id to register the key on the remote server
+if command -v ssh-copy-id >/dev/null 2>&1; then
+  ssh-copy-id -o StrictHostKeyChecking=no -i "${SSH_KEY_FILE}.pub" "${USER_HOST}" || {
+    echo ""
+    echo "  ssh-copy-id failed. Trying manual method..."
+    cat "${SSH_KEY_FILE}.pub" | ssh -o StrictHostKeyChecking=no "${USER_HOST}" \
+      "mkdir -p ~/.ssh && chmod 700 ~/.ssh && cat >> ~/.ssh/authorized_keys && chmod 600 ~/.ssh/authorized_keys"
+  }
 else
-  echo "  WARNING: Could not verify SSH key against Git server."
-  echo "  The clone step may fail. Continuing anyway..."
+  # Manual fallback if ssh-copy-id is not available
+  cat "${SSH_KEY_FILE}.pub" | ssh -o StrictHostKeyChecking=no "${USER_HOST}" \
+    "mkdir -p ~/.ssh && chmod 700 ~/.ssh && cat >> ~/.ssh/authorized_keys && chmod 600 ~/.ssh/authorized_keys"
 fi
 
 echo ""
-echo "SSH keys set up:"
+echo "  Verifying passwordless SSH to ${USER_HOST}..."
+if ssh -o StrictHostKeyChecking=no -o BatchMode=yes -o ConnectTimeout=10 "${USER_HOST}" "echo 'SSH OK'" 2>/dev/null; then
+  echo "  Passwordless SSH to remote server: OK"
+else
+  echo "  WARNING: Passwordless SSH not working yet."
+  echo "  You may still be prompted for a password."
+fi
+
+# =============================================
+# STEP 1c: Copy the SAME key to Gerrit/Git server
+#          via the remote server
+# =============================================
+echo ""
+echo "  Now copying your public key to the Git server (Gerrit)..."
+echo "  This will use the remote server to register the key."
+echo ""
+
+# Copy the public key to the remote server first
+scp -o StrictHostKeyChecking=no "${SSH_KEY_FILE}" "${USER_HOST}:~/.ssh/id_rsa_container"
+scp -o StrictHostKeyChecking=no "${SSH_KEY_FILE}.pub" "${USER_HOST}:~/.ssh/id_rsa_container.pub"
+
+# On the remote server: copy the container key as the main key
+# (only if no key already exists, otherwise append to Gerrit)
+ssh -o StrictHostKeyChecking=no "${USER_HOST}" bash -s << 'REMOTE_SCRIPT'
+  # If no SSH key exists on the remote server, use the container key
+  if [ ! -f ~/.ssh/id_rsa ]; then
+    echo "  No existing key on remote. Installing container key as main key..."
+    cp ~/.ssh/id_rsa_container ~/.ssh/id_rsa
+    cp ~/.ssh/id_rsa_container.pub ~/.ssh/id_rsa.pub
+    chmod 600 ~/.ssh/id_rsa
+    chmod 644 ~/.ssh/id_rsa.pub
+    echo "  Container key installed as main SSH key on remote server."
+  else
+    echo "  Existing key found on remote server. Keeping it."
+    echo "  Container key saved as ~/.ssh/id_rsa_container"
+  fi
+
+  # Add Git server to known_hosts on remote
+  ssh-keyscan -p 29418 buic-scm-ias.automotive-wan.com >> ~/.ssh/known_hosts 2>/dev/null || true
+  echo "  Git server added to remote known_hosts."
+
+  # Test connection from remote to Git server
+  echo "  Testing Git server connection from remote..."
+  ssh -o StrictHostKeyChecking=no -o ConnectTimeout=10 -p 29418 \
+    $(whoami)@buic-scm-ias.automotive-wan.com 2>&1 | head -3 || true
+REMOTE_SCRIPT
+
+# =============================================
+# STEP 1d: Also set up Git server in container
+# =============================================
+echo ""
+echo "  Adding ${GIT_HOST}:${GIT_PORT} to container known_hosts..."
+ssh-keyscan -p "${GIT_PORT}" "${GIT_HOST}" >> ~/.ssh/known_hosts 2>/dev/null || true
+
+echo ""
+echo "  Testing SSH from container to Git server..."
+SSH_TEST=$(ssh -o StrictHostKeyChecking=no -o ConnectTimeout=10 -p "${GIT_PORT}" \
+  "${REMOTE_USER}@${GIT_HOST}" 2>&1 || true)
+echo "  ${SSH_TEST}" | head -3
+
+if echo "${SSH_TEST}" | grep -qi "welcome\|success\|authenticated\|gerrit"; then
+  echo "  Container -> Git server: OK"
+else
+  echo ""
+  echo "  WARNING: Container cannot reach Git server directly."
+  echo "  The git clone will run through the remote server instead."
+fi
+
+echo ""
+echo "  SSH setup complete:"
 ls -la ~/.ssh/
 echo ""
 
@@ -114,7 +214,7 @@ mkdir -p "${LOCAL_DEST}/load/rdfdeploy/RDF/LOADER_FILES/CORE"
 mkdir -p "${LOCAL_DEST}/load/rdfdeploy/RDF/LOADER_FILES/ADAS"
 mkdir -p "${LOCAL_DEST}/${VERSION}/patches/DUPLICATE_DCA2/log"
 
-echo "Directory structure created."
+echo "  Directory structure created."
 
 # =============================================
 # STEP 3: Write generate_files.py
@@ -132,9 +232,6 @@ cat > "${GEN_SCRIPT}" << 'PYEOF'
 """
 Generates all configuration/script files into the correct subdirectories.
 Run from the VERSION root directory (parent of Scripts/, Tests/).
-
-Usage:
-    python3 generate_files.py <VERSION> <DELIVERY> <BASE> <OSUFIX>
 """
 import os
 import re
@@ -210,17 +307,17 @@ def write_file(filepath, content, executable=False):
 scripts_files = {}
 
 scripts_files["Scripts/SVF_PATCH.csh"] = {"executable": True, "content": r"""#!/bin/csh
- 
-echo Pause for 60 seconds; 
+
+echo Pause for 60 seconds;
 sleep 60
- 
+
 source ./LOAD_CFG_<AREA>.cfg
 set C_USERLIST_TR=SVF_DCA2_611
 set PATCH_DIR_DUPLICATE_DCA2="$RDF_HOME/patches/DUPLICATE_DCA2"
 echo ===============================================================================================
 echo `date`:  SVF patches - START
 echo ===============================================================================================
- 
+
 set dir=$PATCH_DIR_DUPLICATE_DCA2
 set c=0
 if ( -d ${dir} ) then
@@ -230,8 +327,8 @@ if ( -d ${dir} ) then
     else
 		echo "Dir has files - "${dir}
 		cd $RDF_HOME/patches
-		./runPatch "nt#r2g2nsB" $SP_SERVER ./DUPLICATE_DCA2/SVF_DUPLICATE_DCA2.sql $C_USERLIST_TR 
-		./errorCheck.csh $RDF_HOME/patches/DUPLICATE_DCA2/log/*SVF_DUPLICATE_DCA2*.log 
+		./runPatch "nt#r2g2nsB" $SP_SERVER ./DUPLICATE_DCA2/SVF_DUPLICATE_DCA2.sql $C_USERLIST_TR
+		./errorCheck.csh $RDF_HOME/patches/DUPLICATE_DCA2/log/*SVF_DUPLICATE_DCA2*.log
     endif
 else
       echo " Not a directory"
@@ -239,17 +336,17 @@ endif
 echo ===============================================================================================
 echo `date`:  SVF patches -  DONE
 echo ===============================================================================================
- 
-echo "SVF PATCHES DONE - check the logs for all the patches ${TIMESTAMP} " | mail -s "SVF PATCHES DONE" $MY_EMAIL
- 
-echo Pause for 60 seconds; 
+
+echo "SVF PATCHES DONE - check the logs for all the patches ${TIMESTAMP} "
+
+echo Pause for 60 seconds;
 sleep 60
 """}
 
 scripts_files["Scripts/RDF_NA_611.XML"] = {"executable": False, "content": r"""<?xml version="1.0" encoding="UTF-8"?>
-<Workflow xmlns="http://navtech.com" 
-    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" 
-    xmlns:log4j="http://jakarta.apache.org/log4j/" 
+<Workflow xmlns="http://navtech.com"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xmlns:log4j="http://jakarta.apache.org/log4j/"
     xsi:schemaLocation="http://navtech.com RDFConfigSchema.xsd"
 >
 <GlobalConfiguration>
@@ -300,7 +397,7 @@ scripts_files["Scripts/RDF_NA_611.XML"] = {"executable": False, "content": r"""<
 """}
 
 scripts_files["Scripts/R2S_NA_611.CFG"] = {"executable": False, "content": r""";#################################################################################
-;R2S generic 
+;R2S generic
 ;#################################################################################
 R2S_RDF_AREA = NA
 R2S_RUN_RDF_CHECK=yes
@@ -330,8 +427,8 @@ R2S_BUA_FILE =
 R2SP2_DB_ADMIN_USER=atadmin
 R2SP2_DB_ADMIN_PASSW=At1dm3nS
 R2SP2_PARALLEL=3
-R2SP2_DROP_TMP_TABLES = no   
-R2SP2_STOP_IF_SVF_USERS_EXIST = no 
+R2SP2_DROP_TMP_TABLES = no
+R2SP2_STOP_IF_SVF_USERS_EXIST = no
 R2SP2_TO_RUN= DCA1 DCA2 DCA3 DCA4 DCA5 DCA6 DCA7 DCA8 DCA9 DCA10 DCA11 DCA12 DCA13 DCA14 MEX DCA15
 DCA1=SVF_DCA1_611 nt#r2g2nsB 921 0 lizard1
 DCA2=SVF_DCA2_611 nt#r2g2nsB 922 0 lizard1
@@ -410,9 +507,9 @@ set ABAKUS_PROD=na2026q1
 """}
 
 scripts_files["Scripts/LOAD_NA_611.CSH"] = {"executable": True, "content": r"""#!/bin/csh
- 
+
 echo $0 \[$$\]
- 
+
 if ( $?STY ) then
 	echo "Screen: $STY"
 endif
@@ -424,31 +521,31 @@ if ( $?CLEARCASE_ROOT ) then
 	cleartool setview -exec 'ct catcs' ${spec_view}
 	echo ===================================================================================
 endif
- 
+
 echo `uname -a`
 echo `cat /etc/redhat-release`
 echo $USER $HOST
- 
+
 set TIMESTAMP=`date +%Y%b%d_%Hh%Mm%Ss`
- 
+
 set SOURCE_CFG=LOAD_CFG_NA.cfg
 source ./$SOURCE_CFG
 echo RDF home directory is: $RDF_HOME
 echo SCRIPTS home directory is: $SCRIPTS_HOME
- 
+
 set LOGS_DIR=log
- 
+
 if ( -d $LOGS_DIR) then
 	mv -v $LOGS_DIR $LOGS_DIR\_${TIMESTAMP}
 	mkdir -p $LOGS_DIR
 else
 	mkdir -p $LOGS_DIR
 endif
- 
+
 cat $SOURCE_CFG > $LOGS_DIR/${TIMESTAMP}_${SOURCE_CFG}
 
 source ./$SOURCE_CFG
- 
+
 if ($COPY_R2S_COMPILER == "1") then
 echo -----------------------------------------------------------------------------------------------
 echo `date`: Starting STEP copy R2S COMPILER ...
@@ -467,7 +564,7 @@ echo ---------------------------------------------------------------------------
 endif
 
 source ./$SOURCE_CFG
- 
+
 if ($COPY_DATA == "1") then
 echo ===============================================================================================
 echo `date`: Part I -- Prepare all files for Load
@@ -481,7 +578,7 @@ cd $SCRIPTS_HOME
 endif
 
 source ./$SOURCE_CFG
- 
+
 if ($EXTRACT_2_LOAD == "1") then
 perl $SCRIPTS_HOME/extract_2_load.pl $SCRIPTS_HOME/../../load |& tee $SCRIPTS_HOME/$LOGS_DIR/extract_2_load.log
 ./errorCheck.csh $SCRIPTS_HOME/$LOGS_DIR/extract_2_load.log
@@ -498,8 +595,8 @@ cd $RDF_HOME/load
 find . -name 'MD5result.log' -exec grep -iE 'NOK|ORA-|SP2-|ERROR' {} \; > md5error.log
 set error=`wc -l < md5error.log`
 echo count is $error
-if($error != 0) then 
-	echo "ERROR: Errors found" 
+if($error != 0) then
+	echo "ERROR: Errors found"
 	exit 1
 else
 	echo "Successfully: No errors found"
@@ -654,16 +751,16 @@ echo "Subject: $RDF_AREA $DSUFIX Tests on R2S & Load finished..." | sendmail $MY
 """}
 
 scripts_files["Scripts/errorCheck.csh"] = {"executable": True, "content": r"""#!/bin/csh -f
- 
+
 # v1.01     20.02.2013
- 
-if ( $#argv < 1 ) then 
+
+if ( $#argv < 1 ) then
   echo
   echo Usage: $0 log_file_name
   echo
   exit 2;
 endif
- 
+
 while ( $#argv >= 1 )
   set C_LOGFILE=$1
   shift
@@ -692,9 +789,6 @@ exit 0
 """}
 
 scripts_files["Scripts/log_checker.pl"] = {"executable": True, "content": r"""#!/usr/bin/perl -w
-=comment
-06.05.2013 Andrei Carp
-=cut
 use warnings;
 use Cwd;
 use Cwd 'abs_path';
@@ -848,7 +942,7 @@ set timing on;
 set def on;
 drop user &1 cascade;
 set echo off;
-exit; 
+exit;
 """}
 
 scripts_files["Scripts/do_offline.csh"] = {"executable": True, "content": r"""#!/bin/csh
@@ -882,7 +976,7 @@ screen -L -A -m -d -c $SCREEN_NAME.cfg -S $SCREEN_NAME $*
 if  ($status != 0) then
 	echo "ERROR: Screen command failed..."
 	goto error
-else 
+else
 	goto done
 endif
 help:
@@ -1097,7 +1191,7 @@ drop user SVF_DCA8_611 CASCADE;
 drop user ADAS_MEX_611 CASCADE;
 
 set echo off;
-exit; 
+exit;
 """}
 
 scripts_files["Tests/SIZE/space_calculate.sql"] = {"executable": False, "content": r"""set echo off
@@ -1118,7 +1212,7 @@ set headsep off
 
 spool size_svf.csv append;
 
-select 'USER;SIZE (GB);&1' from DUAL; 
+select 'USER;SIZE (GB);&1' from DUAL;
 select DS.OWNER as "USER", ROUND(SUM(DS.BYTES) / 1024 / 1024 / 1024, 2) as "GB"
 FROM DBA_SEGMENTS DS
 where DS.OWNER in ('RDF_NA_&1','SVF_DCA1_&1','SVF_DCA2_&1','SVF_DCA3_&1','SVF_DCA4_&1','SVF_DCA5_&1','SVF_DCA6_&1','SVF_DCA7_&1','SVF_DCA8_&1','SVF_DCA9_&1','SVF_DCA10_&1','SVF_DCA11_&1','SVF_DCA12_&1','SVF_DCA13_&1','SVF_DCA14_&1', 'svf_mex_&1','SVF_DCA15_&1')
@@ -1140,7 +1234,7 @@ setenv ORACLE_LIB ${ORACLE_HOME}/lib:/lib:/usr/lib
 setenv LD_LIBRARY_PATH /usr/local/lib:${ORACLE_HOME}/lib:${DBTOOLS}/linux/local/lib
 
 setenv ORACLE_DOC $ORACLE_HOME/doc
-setenv ORACLE_SID GDF 
+setenv ORACLE_SID GDF
 setenv ORACLE_TERM $TERM
 setenv ORA_ROLLBACK_SEGMENT NONE
 setenv ORA_NLS33 $ORACLE_HOME/nls/data
@@ -1224,7 +1318,7 @@ PYEOF
 echo "  Written: ${GEN_SCRIPT}"
 
 # =============================================
-# STEP 4: Check for python3 and run generator
+# STEP 4: Run generate_files.py
 # =============================================
 echo ""
 echo "========================================="
@@ -1276,7 +1370,11 @@ echo "All files generated at: ${ABS_LOCAL_DEST}"
 echo "  Scripts/Tests/patches: ${ABS_LOCAL_DEST}/${VERSION}/"
 echo "  load directory:        ${ABS_LOCAL_DEST}/load/"
 echo ""
-echo "SSH keys are set up at: ~/.ssh/"
+echo "SSH keys:"
+echo "  Private key: ~/.ssh/id_rsa"
+echo "  Public key:  ~/.ssh/id_rsa.pub"
+echo "  Keys also copied to remote server: ${USER_HOST}"
+echo ""
 echo "Git clone should now work when you run the CSH scripts."
 echo ""
 echo "Internal script paths reference: ${RDF_HOME}"
