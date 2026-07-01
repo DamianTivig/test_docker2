@@ -1,33 +1,37 @@
 #!/bin/bash
+set -euo pipefail
 
-set -e
+# =============================================
+# USER INPUT
+# =============================================
+read -r -p "Enter BASE path (used inside scripts): " BASE
+read -r -p "Enter DELIVERY name: " DELIVERY
+read -r -p "Enter VERSION: " VERSION
+read -r -p "Enter OLD VERSION (OSUFIX, e.g., 510): " OSUFIX
+read -r -p "Enter LOCAL destination path (e.g., ./local_env): " LOCAL_DEST
+LOCAL_DEST="${LOCAL_DEST:-./local_env}"
 
-# Remote server details
-REMOTE_USER="uie74356"
-REMOTE_HOST="10.198.127.171"
-USER_HOST="${REMOTE_USER}@${REMOTE_HOST}"
+# Docker settings
+DEFAULT_IMAGE="rockylinux-tcsh:8"
+DEFAULT_CONTAINER="rdf-generator"
+read -r -p "Docker image name (default: ${DEFAULT_IMAGE}): " IMAGE_NAME
+IMAGE_NAME="${IMAGE_NAME:-${DEFAULT_IMAGE}}"
+read -r -p "Container name (default: ${DEFAULT_CONTAINER}): " CONTAINER_NAME
+CONTAINER_NAME="${CONTAINER_NAME:-${DEFAULT_CONTAINER}}"
 
-# Ask user for input
-read -p "Enter BASE path (on remote server): " BASE
-read -p "Enter DELIVERY name: " DELIVERY
-read -p "Enter VERSION: " VERSION
-read -p "Enter OLD VERSION (OSUFIX, e.g., 510): " OSUFIX
-read -p "Enter LOCAL destination path (e.g., /home/uie74356/local_env or ./local_env): " LOCAL_DEST
+CONTAINER_WORKDIR="/workspace"
+RDF_HOME="${BASE}/${DELIVERY}/${VERSION}"
 
-REMOTE_BASE="${BASE}/${DELIVERY}/${VERSION}"
-REMOTE_BASE2="${BASE}/${DELIVERY}"
-
-# Default local destination
-LOCAL_DEST="${LOCAL_DEST:-./${DELIVERY}/${VERSION}}"
-
+echo ""
 echo "========================================="
-echo "REMOTE SERVER: ${REMOTE_HOST}"
-echo "BASE:          ${BASE}"
-echo "DELIVERY:      ${DELIVERY}"
-echo "VERSION:       ${VERSION}"
-echo "OSUFIX:        ${OSUFIX}"
-echo "REMOTE PATH:   ${REMOTE_BASE}"
-echo "LOCAL DEST:    ${LOCAL_DEST}"
+echo "  BASE:          ${BASE}"
+echo "  DELIVERY:      ${DELIVERY}"
+echo "  VERSION:       ${VERSION}"
+echo "  OSUFIX:        ${OSUFIX}"
+echo "  RDF_HOME:      ${RDF_HOME}"
+echo "  LOCAL DEST:    ${LOCAL_DEST}"
+echo "  Image:         ${IMAGE_NAME}"
+echo "  Container:     ${CONTAINER_NAME}"
 echo "========================================="
 echo ""
 
@@ -37,42 +41,42 @@ if [[ "$CONFIRM" != "y" && "$CONFIRM" != "Y" ]]; then
   exit 0
 fi
 
+# =============================================
+# STEP 1: Create local directory structure
+# =============================================
 echo ""
 echo "========================================="
-echo "Step 1: Creating directories on remote server..."
+echo "Step 1: Creating local directory structure..."
 echo "========================================="
 
-ssh -o StrictHostKeyChecking=no ${USER_HOST} "
-export TERM=xterm
-mkdir -p ${REMOTE_BASE}/Scripts
-mkdir -p ${REMOTE_BASE}/Scripts/compiler/gdfConvert/svf/RDF2SVF
-mkdir -p ${REMOTE_BASE}/Scripts/compiler/gdfConvert/scripts
-mkdir -p ${REMOTE_BASE}/Scripts/compiler/gdfConvert/svf/data_model
-mkdir -p ${REMOTE_BASE}/Scripts/compiler/gdfConvert/util/ut
-mkdir -p ${REMOTE_BASE}/Scripts/log
-mkdir -p ${REMOTE_BASE}/Tests/RDF
-mkdir -p ${REMOTE_BASE}/Tests/SIZE
-mkdir -p ${REMOTE_BASE}/Tests/SVF
-mkdir -p ${REMOTE_BASE}/Tests/UT
-mkdir -p ${REMOTE_BASE2}/load/allfiles
-mkdir -p ${REMOTE_BASE2}/load/rdfdeploy/RDF/BIN/etc/xml
-mkdir -p ${REMOTE_BASE2}/load/rdfdeploy/RDF/LOADER_FILES/CORE
-mkdir -p ${REMOTE_BASE2}/load/rdfdeploy/RDF/LOADER_FILES/ADAS
-mkdir -p ${REMOTE_BASE}/patches
-mkdir -p ${REMOTE_BASE}/patches/DUPLICATE_DCA2
-mkdir -p ${REMOTE_BASE}/patches/DUPLICATE_DCA2/log
-echo 'Directory structure created on remote server.'
-"
+mkdir -p "${LOCAL_DEST}/${VERSION}/Scripts/compiler/gdfConvert/svf/RDF2SVF"
+mkdir -p "${LOCAL_DEST}/${VERSION}/Scripts/compiler/gdfConvert/scripts"
+mkdir -p "${LOCAL_DEST}/${VERSION}/Scripts/compiler/gdfConvert/svf/data_model"
+mkdir -p "${LOCAL_DEST}/${VERSION}/Scripts/compiler/gdfConvert/util/ut"
+mkdir -p "${LOCAL_DEST}/${VERSION}/Scripts/log"
+mkdir -p "${LOCAL_DEST}/${VERSION}/Tests/RDF"
+mkdir -p "${LOCAL_DEST}/${VERSION}/Tests/SIZE"
+mkdir -p "${LOCAL_DEST}/${VERSION}/Tests/SVF"
+mkdir -p "${LOCAL_DEST}/${VERSION}/Tests/UT"
+mkdir -p "${LOCAL_DEST}/load/allfiles"
+mkdir -p "${LOCAL_DEST}/load/rdfdeploy/RDF/BIN/etc/xml"
+mkdir -p "${LOCAL_DEST}/load/rdfdeploy/RDF/LOADER_FILES/CORE"
+mkdir -p "${LOCAL_DEST}/load/rdfdeploy/RDF/LOADER_FILES/ADAS"
+mkdir -p "${LOCAL_DEST}/${VERSION}/patches/DUPLICATE_DCA2/log"
 
+echo "Directory structure created."
+
+# =============================================
+# STEP 2: Generate the Python script locally
+# =============================================
 echo ""
 echo "========================================="
-echo "Step 2: Generating files on remote server..."
+echo "Step 2: Writing generate_files.py..."
 echo "========================================="
 
-# Create generate_files.py locally in /tmp
-TMPFILE=$(mktemp /tmp/generate_files_XXXXXX.py)
+GEN_SCRIPT="${LOCAL_DEST}/${VERSION}/generate_files.py"
 
-cat > "$TMPFILE" << 'PYEOF'
+cat > "${GEN_SCRIPT}" << 'PYEOF'
 #!/usr/bin/env python3
 """
 Generates all configuration/script files into the correct subdirectories.
@@ -1166,59 +1170,93 @@ if __name__ == "__main__":
     main()
 PYEOF
 
-# Copy generate_files.py to remote server
-scp -o StrictHostKeyChecking=no "$TMPFILE" ${USER_HOST}:${REMOTE_BASE}/generate_files.py
+echo "  Written: ${GEN_SCRIPT}"
 
-# Run it remotely
-ssh -o StrictHostKeyChecking=no ${USER_HOST} "
-export TERM=xterm
-cd ${REMOTE_BASE} || exit 1
-python3 generate_files.py '${VERSION}' '${DELIVERY}' '${BASE}' '${OSUFIX}'
-rm -f generate_files.py
-echo ''
-echo 'Remote file generation complete.'
-"
-
-# Cleanup local temp file
-rm -f "$TMPFILE"
-
+# =============================================
+# STEP 3: Check Docker image, build if missing
+# =============================================
 echo ""
 echo "========================================="
-echo "Step 3: Copying everything from server to local..."
+echo "Step 3: Checking Docker image..."
 echo "========================================="
 
-# Create local destination
-mkdir -p "${LOCAL_DEST}"
+if ! docker image inspect "${IMAGE_NAME}" >/dev/null 2>&1; then
+  echo "Image '${IMAGE_NAME}' not found. Building..."
+  docker build -t "${IMAGE_NAME}" .
+else
+  echo "Image '${IMAGE_NAME}' found."
+fi
 
-# Copy the entire VERSION directory (Scripts, Tests, patches)
-echo "Copying ${REMOTE_BASE}/ -> ${LOCAL_DEST}/"
-scp -r -o StrictHostKeyChecking=no "${USER_HOST}:${REMOTE_BASE}/*" "${LOCAL_DEST}/"
+# =============================================
+# STEP 4: Remove stale container if present
+# =============================================
+if docker ps -a --format '{{.Names}}' | grep -q "^${CONTAINER_NAME}$"; then
+  echo "Removing old container '${CONTAINER_NAME}'..."
+  docker rm -f "${CONTAINER_NAME}" >/dev/null 2>&1
+fi
 
-# Copy the load directory (sits one level up under DELIVERY)
-LOAD_LOCAL="${LOCAL_DEST}/../load"
-mkdir -p "${LOAD_LOCAL}"
-echo "Copying ${REMOTE_BASE2}/load/ -> ${LOAD_LOCAL}/"
-scp -r -o StrictHostKeyChecking=no "${USER_HOST}:${REMOTE_BASE2}/load/*" "${LOAD_LOCAL}/"
-
+# =============================================
+# STEP 5: Run generate_files.py inside container
+# =============================================
 echo ""
 echo "========================================="
-echo "Step 4: Local file layout"
+echo "Step 4: Running file generation inside container..."
+echo "========================================="
+
+# Resolve LOCAL_DEST to absolute path for the bind mount
+ABS_LOCAL_DEST="$(cd "${LOCAL_DEST}" && pwd)"
+
+docker run \
+  --name "${CONTAINER_NAME}" \
+  --rm \
+  -v "${ABS_LOCAL_DEST}:${CONTAINER_WORKDIR}" \
+  -w "${CONTAINER_WORKDIR}/${VERSION}" \
+  "${IMAGE_NAME}" \
+  /bin/bash -c "
+    set -e
+
+    echo '--- Inside container ---'
+    echo \"Hostname: \$(hostname)\"
+    echo \"OS: \$(cat /etc/redhat-release 2>/dev/null || echo 'unknown')\"
+    echo \"User: \$(whoami)\"
+    echo \"Working dir: \$(pwd)\"
+    echo ''
+
+    if [ ! -f generate_files.py ]; then
+      echo 'ERROR: generate_files.py not found at \$(pwd)'
+      ls -la
+      exit 1
+    fi
+
+    python3 generate_files.py '${VERSION}' '${DELIVERY}' '${BASE}' '${OSUFIX}'
+
+    rm -f generate_files.py
+    echo ''
+    echo 'Cleaned up generate_files.py from workspace.'
+  "
+
+# =============================================
+# STEP 6: Show what was generated
+# =============================================
+echo ""
+echo "========================================="
+echo "Step 5: Generated file layout"
 echo "========================================="
 echo ""
-echo "--- VERSION directory (${LOCAL_DEST}) ---"
-find "${LOCAL_DEST}" -type f | sort
+echo "--- ${VERSION} directory ---"
+find "${LOCAL_DEST}/${VERSION}" -type f | sort
 echo ""
-echo "--- load directory (${LOAD_LOCAL}) ---"
-find "${LOAD_LOCAL}" -type f -o -type d | sort
+echo "--- load directory ---"
+find "${LOCAL_DEST}/load" -type f -o -type d 2>/dev/null | sort || echo "  (empty — populate before running the main script)"
 echo ""
 echo "========================================="
 echo "DONE"
 echo "========================================="
 echo ""
-echo "Files are now available locally at:"
-echo "  Scripts/Tests/patches: ${LOCAL_DEST}"
-echo "  load directory:        ${LOAD_LOCAL}"
+echo "All files generated locally at: ${ABS_LOCAL_DEST}"
+echo "  Scripts/Tests/patches: ${ABS_LOCAL_DEST}/${VERSION}/"
+echo "  load directory:        ${ABS_LOCAL_DEST}/load/"
 echo ""
-echo "To use locally, all file paths inside the scripts"
-echo "still reference the remote BASE path: ${BASE}"
-echo "You may need to update paths if running locally."
+echo "Internal script paths reference: ${RDF_HOME}"
+echo "Mount this local tree into your runner container at that path,"
+echo "or adjust paths inside the generated configs as needed."
