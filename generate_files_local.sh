@@ -2,51 +2,75 @@
 
 set -e
 
+# Remote server details
+REMOTE_USER="uie74356"
+REMOTE_HOST="10.198.127.171"
+USER_HOST="${REMOTE_USER}@${REMOTE_HOST}"
+
 # Ask user for input
-read -p "Enter BASE path: " BASE
+read -p "Enter BASE path (on remote server): " BASE
 read -p "Enter DELIVERY name: " DELIVERY
 read -p "Enter VERSION: " VERSION
 read -p "Enter OLD VERSION (OSUFIX, e.g., 510): " OSUFIX
+read -p "Enter LOCAL destination path (e.g., /home/uie74356/local_env or ./local_env): " LOCAL_DEST
 
-LOCAL_BASE="${BASE}/${DELIVERY}/${VERSION}"
-LOCAL_BASE2="${BASE}/${DELIVERY}"
+REMOTE_BASE="${BASE}/${DELIVERY}/${VERSION}"
+REMOTE_BASE2="${BASE}/${DELIVERY}"
+
+# Default local destination
+LOCAL_DEST="${LOCAL_DEST:-./${DELIVERY}/${VERSION}}"
 
 echo "========================================="
-echo "BASE:       ${BASE}"
-echo "DELIVERY:   ${DELIVERY}"
-echo "VERSION:    ${VERSION}"
-echo "OSUFIX:     ${OSUFIX}"
-echo "FULL PATH:  ${LOCAL_BASE}"
+echo "REMOTE SERVER: ${REMOTE_HOST}"
+echo "BASE:          ${BASE}"
+echo "DELIVERY:      ${DELIVERY}"
+echo "VERSION:       ${VERSION}"
+echo "OSUFIX:        ${OSUFIX}"
+echo "REMOTE PATH:   ${REMOTE_BASE}"
+echo "LOCAL DEST:    ${LOCAL_DEST}"
 echo "========================================="
-echo "Creating directory structure locally..."
+echo ""
 
-# Step 1: Create directory structure locally (including dependencies)
-mkdir -p "${LOCAL_BASE}/Scripts"
-mkdir -p "${LOCAL_BASE}/Scripts/compiler/gdfConvert/svf/RDF2SVF"
-mkdir -p "${LOCAL_BASE}/Scripts/compiler/gdfConvert/scripts"
-mkdir -p "${LOCAL_BASE}/Scripts/compiler/gdfConvert/svf/data_model"
-mkdir -p "${LOCAL_BASE}/Scripts/compiler/gdfConvert/util/ut"
-mkdir -p "${LOCAL_BASE}/Tests/RDF"
-mkdir -p "${LOCAL_BASE}/Tests/SIZE"
-mkdir -p "${LOCAL_BASE}/Tests/SVF"
-mkdir -p "${LOCAL_BASE}/Tests/UT"
-mkdir -p "${LOCAL_BASE2}/load/allfiles"
-mkdir -p "${LOCAL_BASE2}/load/rdfdeploy/RDF/BIN/etc/xml"
-mkdir -p "${LOCAL_BASE2}/load/rdfdeploy/RDF/LOADER_FILES/CORE"
-mkdir -p "${LOCAL_BASE2}/load/rdfdeploy/RDF/LOADER_FILES/ADAS"
-mkdir -p "${LOCAL_BASE}/patches"
-mkdir -p "${LOCAL_BASE}/patches/DUPLICATE_DCA2"
-mkdir -p "${LOCAL_BASE}/patches/DUPLICATE_DCA2/log"
+read -r -p "Proceed? (y/n): " CONFIRM
+if [[ "$CONFIRM" != "y" && "$CONFIRM" != "Y" ]]; then
+  echo "Aborted."
+  exit 0
+fi
 
-# Additional dependency directories
-mkdir -p "${BASE}/DOWNLOAD_Archive/NAVTEQ/Americas/North_America"
-mkdir -p "/db/tools/Abakus2/bin"
-mkdir -p "${LOCAL_BASE}/Scripts/log"
+echo ""
+echo "========================================="
+echo "Step 1: Creating directories on remote server..."
+echo "========================================="
 
-echo "Directory structure created."
+ssh -o StrictHostKeyChecking=no ${USER_HOST} "
+export TERM=xterm
+mkdir -p ${REMOTE_BASE}/Scripts
+mkdir -p ${REMOTE_BASE}/Scripts/compiler/gdfConvert/svf/RDF2SVF
+mkdir -p ${REMOTE_BASE}/Scripts/compiler/gdfConvert/scripts
+mkdir -p ${REMOTE_BASE}/Scripts/compiler/gdfConvert/svf/data_model
+mkdir -p ${REMOTE_BASE}/Scripts/compiler/gdfConvert/util/ut
+mkdir -p ${REMOTE_BASE}/Scripts/log
+mkdir -p ${REMOTE_BASE}/Tests/RDF
+mkdir -p ${REMOTE_BASE}/Tests/SIZE
+mkdir -p ${REMOTE_BASE}/Tests/SVF
+mkdir -p ${REMOTE_BASE}/Tests/UT
+mkdir -p ${REMOTE_BASE2}/load/allfiles
+mkdir -p ${REMOTE_BASE2}/load/rdfdeploy/RDF/BIN/etc/xml
+mkdir -p ${REMOTE_BASE2}/load/rdfdeploy/RDF/LOADER_FILES/CORE
+mkdir -p ${REMOTE_BASE2}/load/rdfdeploy/RDF/LOADER_FILES/ADAS
+mkdir -p ${REMOTE_BASE}/patches
+mkdir -p ${REMOTE_BASE}/patches/DUPLICATE_DCA2
+mkdir -p ${REMOTE_BASE}/patches/DUPLICATE_DCA2/log
+echo 'Directory structure created on remote server.'
+"
 
-# Step 2: Create generate_files.py in the VERSION directory
-TMPFILE="${LOCAL_BASE}/generate_files.py"
+echo ""
+echo "========================================="
+echo "Step 2: Generating files on remote server..."
+echo "========================================="
+
+# Create generate_files.py locally in /tmp
+TMPFILE=$(mktemp /tmp/generate_files_XXXXXX.py)
 
 cat > "$TMPFILE" << 'PYEOF'
 #!/usr/bin/env python3
@@ -56,17 +80,12 @@ Run from the VERSION root directory (parent of Scripts/, Tests/).
 
 Usage:
     python3 generate_files.py <VERSION> <DELIVERY> <BASE> <OSUFIX>
-    or via environment variables: VERSION, DELIVERY, BASE, OSUFIX
 """
 import os
 import re
 import stat
 import sys
 
-
-# ============================================================
-# PARAMETER HANDLING
-# ============================================================
 
 def get_params():
     version  = os.environ.get("VERSION")
@@ -83,20 +102,9 @@ def get_params():
     if len(sys.argv) >= 5 and not osufix:
         osufix = sys.argv[4].strip()
 
-    if not version:
-        version = input("Enter VERSION (e.g., 611): ").strip()
-    if not delivery:
-        delivery = input("Enter DELIVERY (e.g., 2025R4_RDF_North_America_251H0): ").strip()
-    if not base:
-        base = input("Enter BASE (e.g., /PROJ/db4/db/RDF/NA/2026Q1_SeSp): ").strip()
-    if not osufix:
-        osufix = input("Enter OLD VERSION / OSUFIX (e.g., 510): ").strip()
-
     return version, delivery, base, osufix
 
 VERSION, DELIVERY, BASE, OSUFIX = get_params()
-
-# Build the full RDF_HOME path
 RDF_HOME = f"{BASE}/{DELIVERY}/{VERSION}"
 
 print(f"  VERSION:  {VERSION}")
@@ -107,85 +115,34 @@ print(f"  RDF_HOME: {RDF_HOME}")
 print("")
 
 
-# ============================================================
-# SUBSTITUTION ENGINE
-# ============================================================
-
 def apply_subs(text):
-    """Replace all version numbers, delivery path labels, OSUFIX, R2S_VIEW, and lizard1 in the text."""
-
-    # Replace DSUFIX assignment: set DSUFIX=611 -> set DSUFIX=<VERSION>
     text = re.sub(r'(set\s+DSUFIX\s*=\s*)\d{3}\b', r'\g<1>' + VERSION, text)
-
-    # Replace OSUFIX assignment: set OSUFIX=510 -> set OSUFIX=<OSUFIX>
     text = re.sub(r'(set\s+OSUFIX\s*=\s*)\d{3}\b', r'\g<1>' + OSUFIX, text)
-
-    # Replace R2S_VIEW: set R2S_VIEW=sesp_na_611 -> set R2S_VIEW=sesp_na_<VERSION>
     text = re.sub(r'(set\s+R2S_VIEW\s*=\s*sesp_na_)\d{3}\b', r'\g<1>' + VERSION, text)
-
-    # Replace OLD DB USER suffix with OSUFIX
     text = re.sub(r'(R2S_RDF_OLD_DB_USER\s*=\s*RDF_[A-Z]+_)\d{3}\b', r'\g<1>' + OSUFIX, text)
-
-    # Replace RDF user suffixes: RDF_NA_610 -> RDF_NA_<VERSION>
     text = re.sub(r'\b(RDF_[A-Z_]+_)\d{3}\b', r'\g<1>' + VERSION, text)
-
-    # Replace SVF user suffixes (uppercase): SVF_DCA2_611 -> SVF_DCA2_<VERSION>
     text = re.sub(r'\b(SVF_[A-Z0-9]+_)\d{3}\b', r'\g<1>' + VERSION, text)
-
-    # Replace SVF user suffixes (lowercase): svf_dca2_610 -> svf_dca2_<VERSION>
     text = re.sub(r'\b(svf_[a-z0-9]+_)\d{3}\b', r'\g<1>' + VERSION, text)
-
-    # Replace RDF user suffixes (lowercase): rdf_na_610 -> rdf_na_<VERSION>
     text = re.sub(r'\b(rdf_na_)\d{3}\b', r'\g<1>' + VERSION, text)
-
-    # Replace ADAS user suffixes: ADAS_XX_314 -> ADAS_XX_<VERSION>
     text = re.sub(r'\b(ADAS_[A-Z_]+_)\d{3}\b', r'\g<1>' + VERSION, text)
-
-    # Replace delivery path labels like 2025R4_RDF_North_America_251H0 -> <DELIVERY>
     text = re.sub(r'\b\d{4}R[1-4]_RDF_[A-Za-z_]+_\d{3}H\d\b', DELIVERY, text)
-
-    # Replace full RDF_HOME paths - make more flexible
     text = re.sub(
         r'/PROJ/db4/db/RDF/[A-Z]+/[A-Za-z0-9_]+/[A-Za-z0-9_]+/\d{3}',
-        RDF_HOME,
-        text
+        RDF_HOME, text
     )
-
-    # Replace set RDF_HOME=... line specifically
     text = re.sub(
         r'(set\s+RDF_HOME\s*=\s*).*',
         r'\g<1>' + BASE + '/' + DELIVERY + '/',
         text
     )
-
-    # Replace ARCHIVE paths
-    text = re.sub(
-        r'set\s+ARCHIVE_CORE_DATA\s*=.*',
-        f'set ARCHIVE_CORE_DATA={BASE}/DOWNLOAD_Archive/NAVTEQ/Americas/North_America/{DELIVERY}',
-        text
-    )
-    
-    text = re.sub(
-        r'set\s+ARCHIVE_SLOPE_DATA\s*=.*',
-        f'set ARCHIVE_SLOPE_DATA={BASE}/DOWNLOAD_Archive/NAVTEQ/Americas/North_America/{DELIVERY}_CurveHeightSlope_plugin',
-        text
-    )
-
-    # Replace ALL occurrences of lizard1 with dragon1
     text = text.replace('lizard1', 'dragon1')
-
     return text
 
-
-# ============================================================
-# FILE WRITER
-# ============================================================
 
 def write_file(filepath, content, executable=False):
     parent = os.path.dirname(filepath)
     if parent and not os.path.exists(parent):
         os.makedirs(parent, exist_ok=True)
-    # Apply all substitutions
     content = apply_subs(content)
     with open(filepath, 'w', newline='\n') as f:
         f.write(content)
@@ -195,13 +152,7 @@ def write_file(filepath, content, executable=False):
     print(f"  Created: {filepath}")
 
 
-# ============================================================
-# FILE DEFINITIONS
-# ============================================================
-
 scripts_files = {}
-
-# ---- Scripts/ ----
 
 scripts_files["Scripts/SVF_PATCH.csh"] = {"executable": True, "content": r"""#!/bin/csh
  
@@ -217,13 +168,11 @@ echo ===========================================================================
  
 set dir=$PATCH_DIR_DUPLICATE_DCA2
 set c=0
-#make sure $dir exits 
 if ( -d ${dir} ) then
     set c=`ls -a ${dir} | wc | awk '{print $1}'`
-  ##IS dir is empty
     if ( "${c}" == 2 ) then
 		echo "Empty directory - "${dir}
-    else 	#dir has files 	then do the following
+    else
 		echo "Dir has files - "${dir}
 		cd $RDF_HOME/patches
 		./runPatch "nt#r2g2nsB" $SP_SERVER ./DUPLICATE_DCA2/SVF_DUPLICATE_DCA2.sql $C_USERLIST_TR 
@@ -890,8 +839,6 @@ error:
 	exit 1
 """}
 
-# ---- Tests/RDF/ ----
-
 scripts_files["Tests/RDF/AbakusRDF.csh"] = {"executable": True, "content": r"""#!/bin/csh
 
 echo ---------------------------------------------------------------------------
@@ -964,8 +911,6 @@ echo ---------------------------------------------------------------------------
 echo `date`: Abakus RDF End
 echo ---------------------------------------------------------------------------
 """}
-
-# ---- Tests/SVF/ ----
 
 scripts_files["Tests/SVF/AbakusSVF.csh"] = {"executable": True, "content": r"""#!/bin/csh
 
@@ -1052,8 +997,6 @@ echo `date`: Abakus SVF End
 echo ---------------------------------------------------------------------------
 """}
 
-# ---- Tests/SIZE/ ----
-
 scripts_files["Tests/SIZE/drop_users.sql"] = {"executable": False, "content": r"""set echo on;
 set timing on;
 set def on;
@@ -1130,8 +1073,6 @@ spool off
 exit;
 """}
 
-# ---- Tests/UT/ ----
-
 scripts_files["Tests/UT/python_wrapper"] = {"executable": True, "content": r"""#!/bin/csh
 
 setenv ORA_USER /PROJ/db4/dbteam/oracle
@@ -1193,9 +1134,91 @@ python_wrapper $RDF_COMPILER/gdfConvert/util/ut/ut.py --test_user svf_${region}_
 done
 """}
 
-# ---- README ----
-scripts_files["README.md"] = {"executable": False, "content": r"""# RDF/SVF Environment Setup
 
-This directory structure was automatically generated.
+def main():
+    print("========================================")
+    print("Generating files with substitutions...")
+    print(f"  VERSION:  {VERSION}")
+    print(f"  DELIVERY: {DELIVERY}")
+    print(f"  BASE:     {BASE}")
+    print(f"  OSUFIX:   {OSUFIX}")
+    print("========================================")
+    print("")
 
-## Directory Structure
+    for filepath, meta in scripts_files.items():
+        write_file(filepath, meta["content"], meta.get("executable", False))
+
+    version_renames = {
+        "Scripts/RDF_NA_611.XML": f"Scripts/RDF_NA_{VERSION}.XML",
+        "Scripts/R2S_NA_611.CFG": f"Scripts/R2S_NA_{VERSION}.CFG",
+        "Scripts/LOAD_NA_611.CSH": f"Scripts/LOAD_NA_{VERSION}.CSH",
+    }
+    for old_name, new_name in version_renames.items():
+        if old_name != new_name and os.path.exists(old_name):
+            os.rename(old_name, new_name)
+            print(f"  Renamed: {old_name} -> {new_name}")
+
+    print("")
+    print("===== All files generated successfully =====")
+    print(f"Generated in: {os.getcwd()}")
+
+if __name__ == "__main__":
+    main()
+PYEOF
+
+# Copy generate_files.py to remote server
+scp -o StrictHostKeyChecking=no "$TMPFILE" ${USER_HOST}:${REMOTE_BASE}/generate_files.py
+
+# Run it remotely
+ssh -o StrictHostKeyChecking=no ${USER_HOST} "
+export TERM=xterm
+cd ${REMOTE_BASE} || exit 1
+python3 generate_files.py '${VERSION}' '${DELIVERY}' '${BASE}' '${OSUFIX}'
+rm -f generate_files.py
+echo ''
+echo 'Remote file generation complete.'
+"
+
+# Cleanup local temp file
+rm -f "$TMPFILE"
+
+echo ""
+echo "========================================="
+echo "Step 3: Copying everything from server to local..."
+echo "========================================="
+
+# Create local destination
+mkdir -p "${LOCAL_DEST}"
+
+# Copy the entire VERSION directory (Scripts, Tests, patches)
+echo "Copying ${REMOTE_BASE}/ -> ${LOCAL_DEST}/"
+scp -r -o StrictHostKeyChecking=no "${USER_HOST}:${REMOTE_BASE}/*" "${LOCAL_DEST}/"
+
+# Copy the load directory (sits one level up under DELIVERY)
+LOAD_LOCAL="${LOCAL_DEST}/../load"
+mkdir -p "${LOAD_LOCAL}"
+echo "Copying ${REMOTE_BASE2}/load/ -> ${LOAD_LOCAL}/"
+scp -r -o StrictHostKeyChecking=no "${USER_HOST}:${REMOTE_BASE2}/load/*" "${LOAD_LOCAL}/"
+
+echo ""
+echo "========================================="
+echo "Step 4: Local file layout"
+echo "========================================="
+echo ""
+echo "--- VERSION directory (${LOCAL_DEST}) ---"
+find "${LOCAL_DEST}" -type f | sort
+echo ""
+echo "--- load directory (${LOAD_LOCAL}) ---"
+find "${LOAD_LOCAL}" -type f -o -type d | sort
+echo ""
+echo "========================================="
+echo "DONE"
+echo "========================================="
+echo ""
+echo "Files are now available locally at:"
+echo "  Scripts/Tests/patches: ${LOCAL_DEST}"
+echo "  load directory:        ${LOAD_LOCAL}"
+echo ""
+echo "To use locally, all file paths inside the scripts"
+echo "still reference the remote BASE path: ${BASE}"
+echo "You may need to update paths if running locally."
