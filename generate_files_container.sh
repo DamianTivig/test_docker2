@@ -2,30 +2,13 @@
 set -euo pipefail
 
 # =============================================
-# REMOTE SERVER
+# PROJECT INPUT
 # =============================================
 DEFAULT_REMOTE_USER="uie74356"
-DEFAULT_REMOTE_HOST="10.198.127.171"
-DEFAULT_GIT_HOST="buic-scm-ias.automotive-wan.com"
-DEFAULT_GIT_PORT="29418"
 
 read -r -p "Remote user (default: ${DEFAULT_REMOTE_USER}): " REMOTE_USER
 REMOTE_USER="${REMOTE_USER:-${DEFAULT_REMOTE_USER}}"
 
-read -r -p "Remote host (default: ${DEFAULT_REMOTE_HOST}): " REMOTE_HOST
-REMOTE_HOST="${REMOTE_HOST:-${DEFAULT_REMOTE_HOST}}"
-
-read -r -p "Git server host (default: ${DEFAULT_GIT_HOST}): " GIT_HOST
-GIT_HOST="${GIT_HOST:-${DEFAULT_GIT_HOST}}"
-
-read -r -p "Git server port (default: ${DEFAULT_GIT_PORT}): " GIT_PORT
-GIT_PORT="${GIT_PORT:-${DEFAULT_GIT_PORT}}"
-
-USER_HOST="${REMOTE_USER}@${REMOTE_HOST}"
-
-# =============================================
-# PROJECT INPUT
-# =============================================
 read -r -p "Enter BASE path (used inside scripts): " BASE
 read -r -p "Enter DELIVERY name: " DELIVERY
 read -r -p "Enter VERSION: " VERSION
@@ -37,8 +20,7 @@ RDF_HOME="${BASE}/${DELIVERY}/${VERSION}"
 
 echo ""
 echo "========================================="
-echo "  Remote server  : ${USER_HOST}"
-echo "  Git server     : ${GIT_HOST}:${GIT_PORT}"
+echo "  User           : ${REMOTE_USER}"
 echo "  BASE           : ${BASE}"
 echo "  DELIVERY       : ${DELIVERY}"
 echo "  VERSION        : ${VERSION}"
@@ -55,140 +37,73 @@ if [[ "$CONFIRM" != "y" && "$CONFIRM" != "Y" ]]; then
 fi
 
 # =============================================
-# STEP 1: Generate SSH keys in container
-#         and copy them to the remote server
+# STEP 1: Verify SSH key exists
 # =============================================
 echo ""
 echo "========================================="
-echo "Step 1: Setting up SSH keys..."
+echo "Step 1: Checking SSH keys..."
 echo "========================================="
-
-mkdir -p ~/.ssh
-chmod 700 ~/.ssh
 
 SSH_KEY_FILE=~/.ssh/id_rsa
 
-if [ -f "${SSH_KEY_FILE}" ]; then
-  echo "  SSH key already exists: ${SSH_KEY_FILE}"
-  read -r -p "  Regenerate? (y/n): " REGEN
-  if [[ "$REGEN" == "y" || "$REGEN" == "Y" ]]; then
-    rm -f "${SSH_KEY_FILE}" "${SSH_KEY_FILE}.pub"
-  else
-    echo "  Keeping existing key."
-  fi
-fi
-
 if [ ! -f "${SSH_KEY_FILE}" ]; then
   echo ""
-  echo "  Generating new SSH key pair inside container..."
-  ssh-keygen -t rsa -b 4096 -C "${REMOTE_USER}@container" -f "${SSH_KEY_FILE}" -N ""
+  echo "  ERROR: No SSH key found at ${SSH_KEY_FILE}"
   echo ""
-  echo "  Key generated: ${SSH_KEY_FILE}"
+  echo "  Please generate your SSH key manually first:"
+  echo ""
+  echo "    ssh-keygen -t rsa -b 4096 -C \"${REMOTE_USER}@container\" -f ~/.ssh/id_rsa -N \"\""
+  echo ""
+  echo "  Then register it in Gerrit:"
+  echo "    1. Copy the output of:  cat ~/.ssh/id_rsa.pub"
+  echo "    2. Open https://buic-scm-ias.automotive-wan.com"
+  echo "    3. Go to Settings -> SSH Keys"
+  echo "    4. Paste your public key and click Add"
+  echo ""
+  echo "  Then run this script again."
+  exit 1
 fi
 
-chmod 600 "${SSH_KEY_FILE}"
-chmod 644 "${SSH_KEY_FILE}.pub"
-
-echo ""
-echo "  Your public key:"
-echo "  --------------------------------------------------------"
+echo "  SSH key found: ${SSH_KEY_FILE}"
+echo "  Public key:"
 cat "${SSH_KEY_FILE}.pub"
-echo "  --------------------------------------------------------"
-
-# =============================================
-# STEP 1b: Copy public key to remote server
-# =============================================
-echo ""
-echo "  Copying public key to remote server ${USER_HOST}..."
-echo "  (You will be prompted for your password)"
 echo ""
 
-# Use ssh-copy-id to register the key on the remote server
-if command -v ssh-copy-id >/dev/null 2>&1; then
-  ssh-copy-id -o StrictHostKeyChecking=no -i "${SSH_KEY_FILE}.pub" "${USER_HOST}" || {
-    echo ""
-    echo "  ssh-copy-id failed. Trying manual method..."
-    cat "${SSH_KEY_FILE}.pub" | ssh -o StrictHostKeyChecking=no "${USER_HOST}" \
-      "mkdir -p ~/.ssh && chmod 700 ~/.ssh && cat >> ~/.ssh/authorized_keys && chmod 600 ~/.ssh/authorized_keys"
-  }
-else
-  # Manual fallback if ssh-copy-id is not available
-  cat "${SSH_KEY_FILE}.pub" | ssh -o StrictHostKeyChecking=no "${USER_HOST}" \
-    "mkdir -p ~/.ssh && chmod 700 ~/.ssh && cat >> ~/.ssh/authorized_keys && chmod 600 ~/.ssh/authorized_keys"
-fi
-
-echo ""
-echo "  Verifying passwordless SSH to ${USER_HOST}..."
-if ssh -o StrictHostKeyChecking=no -o BatchMode=yes -o ConnectTimeout=10 "${USER_HOST}" "echo 'SSH OK'" 2>/dev/null; then
-  echo "  Passwordless SSH to remote server: OK"
-else
-  echo "  WARNING: Passwordless SSH not working yet."
-  echo "  You may still be prompted for a password."
-fi
-
-# =============================================
-# STEP 1c: Copy the SAME key to Gerrit/Git server
-#          via the remote server
-# =============================================
-echo ""
-echo "  Now copying your public key to the Git server (Gerrit)..."
-echo "  This will use the remote server to register the key."
-echo ""
-
-# Copy the public key to the remote server first
-scp -o StrictHostKeyChecking=no "${SSH_KEY_FILE}" "${USER_HOST}:~/.ssh/id_rsa_container"
-scp -o StrictHostKeyChecking=no "${SSH_KEY_FILE}.pub" "${USER_HOST}:~/.ssh/id_rsa_container.pub"
-
-# On the remote server: copy the container key as the main key
-# (only if no key already exists, otherwise append to Gerrit)
-ssh -o StrictHostKeyChecking=no "${USER_HOST}" bash -s << 'REMOTE_SCRIPT'
-  # If no SSH key exists on the remote server, use the container key
-  if [ ! -f ~/.ssh/id_rsa ]; then
-    echo "  No existing key on remote. Installing container key as main key..."
-    cp ~/.ssh/id_rsa_container ~/.ssh/id_rsa
-    cp ~/.ssh/id_rsa_container.pub ~/.ssh/id_rsa.pub
-    chmod 600 ~/.ssh/id_rsa
-    chmod 644 ~/.ssh/id_rsa.pub
-    echo "  Container key installed as main SSH key on remote server."
-  else
-    echo "  Existing key found on remote server. Keeping it."
-    echo "  Container key saved as ~/.ssh/id_rsa_container"
-  fi
-
-  # Add Git server to known_hosts on remote
+# Verify Gerrit is in known_hosts
+if ! grep -q "buic-scm-ias.automotive-wan.com" ~/.ssh/known_hosts 2>/dev/null; then
+  echo "  Adding Gerrit to known_hosts..."
   ssh-keyscan -p 29418 buic-scm-ias.automotive-wan.com >> ~/.ssh/known_hosts 2>/dev/null || true
-  echo "  Git server added to remote known_hosts."
-
-  # Test connection from remote to Git server
-  echo "  Testing Git server connection from remote..."
-  ssh -o StrictHostKeyChecking=no -o ConnectTimeout=10 -p 29418 \
-    $(whoami)@buic-scm-ias.automotive-wan.com 2>&1 | head -3 || true
-REMOTE_SCRIPT
-
-# =============================================
-# STEP 1d: Also set up Git server in container
-# =============================================
-echo ""
-echo "  Adding ${GIT_HOST}:${GIT_PORT} to container known_hosts..."
-ssh-keyscan -p "${GIT_PORT}" "${GIT_HOST}" >> ~/.ssh/known_hosts 2>/dev/null || true
-
-echo ""
-echo "  Testing SSH from container to Git server..."
-SSH_TEST=$(ssh -o StrictHostKeyChecking=no -o ConnectTimeout=10 -p "${GIT_PORT}" \
-  "${REMOTE_USER}@${GIT_HOST}" 2>&1 || true)
-echo "  ${SSH_TEST}" | head -3
-
-if echo "${SSH_TEST}" | grep -qi "welcome\|success\|authenticated\|gerrit"; then
-  echo "  Container -> Git server: OK"
-else
-  echo ""
-  echo "  WARNING: Container cannot reach Git server directly."
-  echo "  The git clone will run through the remote server instead."
 fi
 
-echo ""
-echo "  SSH setup complete:"
-ls -la ~/.ssh/
+# Quick test with 5 second timeout (Gerrit hangs after welcome message, that is normal)
+echo "  Testing SSH to Gerrit (5s timeout)..."
+SSH_TEST=$(timeout 5 ssh -o StrictHostKeyChecking=no -p 29418 "${REMOTE_USER}@buic-scm-ias.automotive-wan.com" 2>&1 || true)
+
+if echo "${SSH_TEST}" | grep -qi "welcome\|gerrit"; then
+  echo "  SSH to Gerrit: OK (Welcome to Gerrit)"
+elif echo "${SSH_TEST}" | grep -qi "permission denied"; then
+  echo ""
+  echo "  ERROR: Permission denied. Your key is not registered in Gerrit."
+  echo ""
+  echo "  Register your public key:"
+  echo "    1. Copy the output of:  cat ~/.ssh/id_rsa.pub"
+  echo "    2. Open https://buic-scm-ias.automotive-wan.com"
+  echo "    3. Go to Settings -> SSH Keys"
+  echo "    4. Paste and click Add"
+  echo ""
+  read -r -p "  Continue anyway? (y/n): " CONT
+  if [[ "$CONT" != "y" && "$CONT" != "Y" ]]; then
+    exit 1
+  fi
+else
+  echo "  WARNING: Could not verify Gerrit connection."
+  echo "  Response: ${SSH_TEST}"
+  read -r -p "  Continue anyway? (y/n): " CONT
+  if [[ "$CONT" != "y" && "$CONT" != "Y" ]]; then
+    exit 1
+  fi
+fi
+
 echo ""
 
 # =============================================
@@ -230,8 +145,7 @@ GEN_SCRIPT="${GEN_DIR}/generate_files.py"
 cat > "${GEN_SCRIPT}" << 'PYEOF'
 #!/usr/bin/env python3
 """
-Generates all configuration/script files into the correct subdirectories.
-Run from the VERSION root directory (parent of Scripts/, Tests/).
+Generates all configuration/script files with version substitutions.
 """
 import os
 import re
@@ -1370,11 +1284,7 @@ echo "All files generated at: ${ABS_LOCAL_DEST}"
 echo "  Scripts/Tests/patches: ${ABS_LOCAL_DEST}/${VERSION}/"
 echo "  load directory:        ${ABS_LOCAL_DEST}/load/"
 echo ""
-echo "SSH keys:"
-echo "  Private key: ~/.ssh/id_rsa"
-echo "  Public key:  ~/.ssh/id_rsa.pub"
-echo "  Keys also copied to remote server: ${USER_HOST}"
-echo ""
-echo "Git clone should now work when you run the CSH scripts."
+echo "SSH key used: ${SSH_KEY_FILE}"
+echo "Git clone should work when you run the CSH scripts."
 echo ""
 echo "Internal script paths reference: ${RDF_HOME}"
